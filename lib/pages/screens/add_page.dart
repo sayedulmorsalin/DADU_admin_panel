@@ -14,9 +14,9 @@ class _AddPageState extends State<AddPage> {
   final DatabaseService _dbService = DatabaseService();
   final ImageUploadService _imageService = ImageUploadService();
   List<Map<String, dynamic>> products = [];
-  final List<String> brands = ['Adidas', 'Nike', 'Puma', 'Gloves', 'Other_boots', 'Others'];
+  final List<String> brands = ['Adidas', 'Nike', 'Puma', 'Gloves', 'Other_boots', 'Jersey', 'Pant', 'Others'];
 
-  // Add Product Controllers
+
   final TextEditingController _addNameController = TextEditingController();
   final TextEditingController _addPriceController = TextEditingController();
   final TextEditingController _addDetailsController = TextEditingController();
@@ -26,7 +26,7 @@ class _AddPageState extends State<AddPage> {
   String _selectedBrand = 'Adidas';
   bool _isUploading = false;
 
-  // Edit Product Controllers
+
   late TextEditingController _editNameController;
   late TextEditingController _editPriceController;
   late TextEditingController _editDetailsController;
@@ -150,7 +150,7 @@ class _AddPageState extends State<AddPage> {
                 });
               },
               decoration: const InputDecoration(
-                labelText: "Brand",
+                labelText: "Brand/Category",
                 border: OutlineInputBorder(),
               ),
             ),
@@ -189,7 +189,7 @@ class _AddPageState extends State<AddPage> {
         "videoLink": _editVideoController.text,
       };
 
-      // Update product in Firestore
+
       await _dbService.updateProduct(
         updatedProduct['id'],
         {
@@ -201,12 +201,12 @@ class _AddPageState extends State<AddPage> {
         },
       );
 
-      // Update name in names collection if changed
+
       if (oldName != updatedProduct['name']) {
         await _dbService.updateProductName(oldName, updatedProduct['name']);
       }
 
-      // Update local state
+
       setState(() => products[index] = updatedProduct);
       Navigator.pop(context);
     } catch (e) {
@@ -239,13 +239,13 @@ class _AddPageState extends State<AddPage> {
                 await imageService.deleteImage(img5);
                 await imageService.deleteImage(img20);
 
-                // Delete from products collection
+
                 await _dbService.deleteProduct(products[index]['id']);
 
-                // Remove from names collection
+
                 await _dbService.removeProductName(productName);
 
-                // Update local state
+
                 setState(() => products.removeAt(index));
 
                 Navigator.pop(context);
@@ -262,7 +262,7 @@ class _AddPageState extends State<AddPage> {
   }
 
   void _showAddProductSheet() {
-    // Reset form
+
     _addNameController.clear();
     _addPriceController.clear();
     _addDetailsController.clear();
@@ -376,7 +376,7 @@ class _AddPageState extends State<AddPage> {
                   });
                 },
                 decoration: const InputDecoration(
-                  labelText: "Brand",
+                  labelText: "Brand/Category",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -435,13 +435,13 @@ class _AddPageState extends State<AddPage> {
         "image20": urls['url20'],
       };
 
-      // Add to products collection
+
       final docRef = await _dbService.addProduct(newProduct);
 
-      // Add to names collection
+
       await _dbService.addProductName(newProduct['name']??"no name");
 
-      // Update local state
+
       setState(() => products.insert(0, {
         ...newProduct,
         'id': docRef.id,

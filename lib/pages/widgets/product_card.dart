@@ -23,7 +23,7 @@ class ProductCard extends StatelessWidget {
         padding: const EdgeInsets.all(8.0),
         child: Row(
           children: [
-            // Product Image
+
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
@@ -58,7 +58,6 @@ class ProductCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Price
                   Text(
                     '৳${product['price'] ?? '0'}',
                     style: const TextStyle(
@@ -71,7 +70,6 @@ class ProductCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Brand
                   Text(
                     'Brand: ${product['brand'] ?? ''}',
                     style: TextStyle(
@@ -84,7 +82,6 @@ class ProductCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Details
                   Text(
                     product['details'] ?? '',
                     style: const TextStyle(fontSize: 14),
@@ -94,7 +91,7 @@ class ProductCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Clicks
+
                   Text(
                     'Clicks: ${product['clicked'] ?? 0}',
                     style: const TextStyle(
@@ -107,7 +104,7 @@ class ProductCard extends StatelessWidget {
 
                   const SizedBox(height: 10),
 
-                  // Buttons
+
                   Align(
                     alignment: Alignment.centerRight,
                     child: Wrap(
