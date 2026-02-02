@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 
@@ -11,34 +10,11 @@ class NewArrival extends StatefulWidget {
 }
 
 class _NewArrivalState extends State<NewArrival> {
-  late Timer _timer;
 
   DatabaseService _dbService = DatabaseService();
   List<Map<String, dynamic>> products = [];
 
 
-  String formatRemainingTime(dynamic value) {
-    if (value == null) return "No New Product";
-
-    DateTime endTime;
-    if (value is Timestamp) {
-      endTime = value.toDate();
-    }
-    else if (value is String) {
-      endTime = DateTime.parse(value);
-    } else {
-      return "Invalid date";
-    }
-
-    final now = DateTime.now();
-    Duration diff = endTime.difference(now);
-
-    if (diff.isNegative) return "Expired";
-
-    String two(int n) => n.toString().padLeft(2, "0");
-
-    return "${two(diff.inHours)}:${two(diff.inMinutes % 60)}:${two(diff.inSeconds % 60)}";
-  }
 
 
   @override
@@ -46,20 +22,8 @@ class _NewArrivalState extends State<NewArrival> {
     super.initState();
     _loadProducts();
 
-
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {});
-    });
   }
 
-
-  @override
-  void dispose() {
-    if (_timer.isActive) {
-      _timer.cancel();
-    }
-    super.dispose();
-  }
 
 
   Future<void> _loadProducts() async {
@@ -80,100 +44,50 @@ class _NewArrivalState extends State<NewArrival> {
 
 
   void showTextDateTimeDialog(Map<String, dynamic> product) {
-    final TextEditingController textController = TextEditingController();
-    DateTime? selectedDate;
-    TimeOfDay? selectedTime;
+    final bool isNewArrival =
+    product["newArrival"] is bool ? product["newArrival"] : false;
+
+    final String productId = product["id"];
 
     showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text("Add to new arrival"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+      builder: (_) => AlertDialog(
+        title: Text(
+            isNewArrival ? "Remove from New Arrival?" : "Add to New Arrival?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
 
-                  ElevatedButton(
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (pickedDate != null) {
-                        setState(() => selectedDate = pickedDate);
-                      }
-                    },
-                    child: Text(selectedDate == null
-                        ? "Pick Date"
-                        : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}"),
-                  ),
+              try {
+                final newValue = !isNewArrival;
 
-                  SizedBox(height: 12),
+                await _dbService.updateProduct(productId, {
+                  "newArrival": newValue,
+                });
 
-                  ElevatedButton(
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (pickedTime != null) {
-                        setState(() => selectedTime = pickedTime);
-                      }
-                    },
-                    child: Text(selectedTime == null
-                        ? "Pick Time"
-                        : selectedTime!.format(context)),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text("Cancel"),
-                ),
+                setState(() {
+                  product["newArrival"] = newValue;
+                });
 
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-
-                    DateTime? finalDateTime;
-                    if (selectedDate != null && selectedTime != null) {
-                      finalDateTime = DateTime(
-                        selectedDate!.year,
-                        selectedDate!.month,
-                        selectedDate!.day,
-                        selectedTime!.hour,
-                        selectedTime!.minute,
-                      );
-                    }
-
-                    final String productId = product["id"];
-
-                    try {
-                      await _dbService.updateProduct(productId, {
-                        "newArrival": true,
-                        "arrival-expire": finalDateTime,
-                      });
-
-                      _showSnackBar("New arrival updated successfully!");
-                      _loadProducts();
-                    } catch (e) {
-                      _showSnackBar("Update failed: $e");
-                    }
-                  },
-                  child: Text("Submit"),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                _showSnackBar(
+                    newValue ? "Added" : "Removed");
+              } catch (e) {
+                _showSnackBar("Update failed: $e");
+              }
+            },
+            child: Text(isNewArrival ? "Remove" : "Add"),
+          ),
+        ],
+      ),
     );
   }
+
+
 
 
   @override
@@ -197,7 +111,6 @@ class _NewArrivalState extends State<NewArrival> {
           itemBuilder: (context, index) {
             final product = products[index];
 
-            String countdown = formatRemainingTime(product["arrival-expire"]);
 
             return Card(
               elevation: 4,
@@ -241,17 +154,6 @@ class _NewArrivalState extends State<NewArrival> {
                                   style: TextStyle(fontSize: 16)),
 
                               SizedBox(height: 6),
-
-                              Text(
-                                "Remaining: $countdown",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: countdown == "Expired"
-                                      ? Colors.red
-                                      : Colors.green,
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -263,7 +165,11 @@ class _NewArrivalState extends State<NewArrival> {
                       children: [
                         ElevatedButton(
                           onPressed: () => showTextDateTimeDialog(product),
-                          child: Text("New arrival"),
+                          child: Text(
+                            product["newArrival"] == true
+                                ? "Remove from new arrival"
+                                : "Add to new arrival",
+                          ),
                         ),
                       ],
                     )

@@ -30,6 +30,7 @@ class DatabaseService {
         "fl-price": data['fl-price'] ?? null,
         "oldPrice": data['oldPrice'] ?? null,
         "flash-expire": data['flash-expire'] ?? null,
+        "newArrival": data['newArrival'] ?? null,
       };
     }).toList();
   }
