@@ -1,16 +1,16 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:dadu_admin_panel/pages/services/database_service.dart';
-import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import '../services/database_service.dart';
 
-class FlashSell extends StatefulWidget {
-  const FlashSell({super.key});
+class NewArrival extends StatefulWidget {
+  const NewArrival({super.key});
 
   @override
-  State<FlashSell> createState() => _FlashSellState();
+  State<NewArrival> createState() => _NewArrivalState();
 }
 
-class _FlashSellState extends State<FlashSell> {
+class _NewArrivalState extends State<NewArrival> {
   late Timer _timer;
 
   DatabaseService _dbService = DatabaseService();
@@ -18,7 +18,7 @@ class _FlashSellState extends State<FlashSell> {
 
 
   String formatRemainingTime(dynamic value) {
-    if (value == null) return "No flash";
+    if (value == null) return "No New Product";
 
     DateTime endTime;
     if (value is Timestamp) {
@@ -90,18 +90,10 @@ class _FlashSellState extends State<FlashSell> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text("Write discount price"),
+              title: Text("Add to new arrival"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: textController,
-                    decoration: InputDecoration(
-                      labelText: "new price",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  SizedBox(height: 16),
 
                   ElevatedButton(
                     onPressed: () async {
@@ -160,18 +152,14 @@ class _FlashSellState extends State<FlashSell> {
                     }
 
                     final String productId = product["id"];
-                    final String newPrice = textController.text.trim();
-                    final String oldPrice = product["price"];
 
                     try {
                       await _dbService.updateProduct(productId, {
-                        "flashSell": true,
-                        "price": newPrice,
-                        "oldPrice": oldPrice,
-                        "flash-expire": finalDateTime,
+                        "newArrival": true,
+                        "arrival-expire": finalDateTime,
                       });
 
-                      _showSnackBar("Flash sell updated successfully!");
+                      _showSnackBar("New arrival updated successfully!");
                       _loadProducts();
                     } catch (e) {
                       _showSnackBar("Update failed: $e");
@@ -194,7 +182,7 @@ class _FlashSellState extends State<FlashSell> {
       appBar: AppBar(
         centerTitle: true,
         title: Text(
-          "Flash Sell",
+          "New Arrival",
           style: TextStyle(
             color: Colors.orange,
             fontSize: 24,
@@ -209,7 +197,7 @@ class _FlashSellState extends State<FlashSell> {
           itemBuilder: (context, index) {
             final product = products[index];
 
-            String countdown = formatRemainingTime(product["flash-expire"]);
+            String countdown = formatRemainingTime(product["arrival-expire"]);
 
             return Card(
               elevation: 4,
@@ -275,7 +263,7 @@ class _FlashSellState extends State<FlashSell> {
                       children: [
                         ElevatedButton(
                           onPressed: () => showTextDateTimeDialog(product),
-                          child: Text("Flash Sell"),
+                          child: Text("New arrival"),
                         ),
                       ],
                     )

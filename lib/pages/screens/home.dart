@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/database_service.dart';
+import 'gift_item.dart';
+import 'new_arrival.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -67,7 +69,6 @@ class _AdminHomeState extends State<AdminHome> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Today's Login Circle
           StreamBuilder<int>(
             stream: todayLoginsStream,
             builder: (context, snapshot) {
@@ -79,12 +80,11 @@ class _AdminHomeState extends State<AdminHome> {
           ),
           const SizedBox(height: 20),
 
-          // Account and Download Counts
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               FutureBuilder<int>(
-                future: accountCount, // This should be Future<int>
+                future: accountCount,
                 builder: (context, snapshot) {
                   return _buildCountCard(
                     title: 'Total Accounts',
@@ -96,7 +96,7 @@ class _AdminHomeState extends State<AdminHome> {
                 },
               ),
               FutureBuilder<int>(
-                future: downloadCount, // This should be Future<int>
+                future: downloadCount,
                 builder: (context, snapshot) {
                   return _buildCountCard(
                     title: 'Total Downloads',
@@ -111,7 +111,6 @@ class _AdminHomeState extends State<AdminHome> {
           ),
           const SizedBox(height: 20),
 
-          // Action Buttons - First Row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -136,7 +135,7 @@ class _AdminHomeState extends State<AdminHome> {
                     icon: Icons.local_shipping,
                     label: "Shipping",
                     count: count,
-                    color: Colors.purple,
+                    color: Colors.indigo,
                     onPressed: () => _navigateToShipping(context),
                   );
                 },
@@ -149,7 +148,7 @@ class _AdminHomeState extends State<AdminHome> {
                     icon: Icons.card_giftcard,
                     label: "Delivered",
                     count: count,
-                    color: Colors.green,
+                    color: Colors.black,
                     onPressed: () => _navigateToDelivered(context),
                   );
                 },
@@ -158,7 +157,6 @@ class _AdminHomeState extends State<AdminHome> {
           ),
           const SizedBox(height: 15),
 
-          // Action Buttons - Second Row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -166,28 +164,51 @@ class _AdminHomeState extends State<AdminHome> {
                 icon: Icons.add,
                 label: "Add Product",
                 count: null,
-                color: Colors.green,
+                color: Colors.yellow.shade800,
                 onPressed: () => _navigateToAddProduct(context),
               ),
               _buildActionButton(
                 icon: Icons.upload,
                 label: "Update banner",
                 count: null,
-                color: Colors.blue,
+                color: Colors.blueAccent,
                 onPressed: () => _navigateToBannerPage(context),
               ),
               _buildActionButton(
                 icon: Icons.flash_on,
                 label: "flash sell",
                 count: null,
-                color: Colors.redAccent,
+                color: Colors.deepPurple,
                 onPressed: () => _navigateToFlashSell(context),
+              ),
+
+
+            ],
+          ),
+
+          const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildActionButton(
+                icon: Icons.new_label,
+                label: "New Arrival",
+                count: null,
+                color: Colors.yellow.shade600,
+                onPressed: () => _navigateToNewArrivalPage(context),
+              ),
+              _buildActionButton(
+                icon: Icons.card_giftcard,
+                label: "Gift Item",
+                count: null,
+                color: Colors.blue,
+                onPressed: () => _navigateToGiftItem(context),
               ),
               _buildActionButton(
                 icon: Icons.search,
                 label: "Search",
                 count: null,
-                color: Colors.black,
+                color: Colors.purple,
                 onPressed: () => _navigateToSearchUser(context),
               ),
 
@@ -195,8 +216,6 @@ class _AdminHomeState extends State<AdminHome> {
           ),
 
           const SizedBox(height: 30),
-
-          // Last Login List
           _buildLastLoginList(),
         ],
       ),
@@ -461,6 +480,20 @@ class _AdminHomeState extends State<AdminHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => BannerPage()),
+    );
+  }
+
+  void _navigateToNewArrivalPage(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => NewArrival()),
+    );
+  }
+
+  void _navigateToGiftItem(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => GiftItem()),
     );
   }
 }

@@ -27,8 +27,6 @@ class DatabaseService {
         "clicked": data['clicked'] ?? 0,
         "image5": data['image5'],
         "image20": data['image20'],
-
-        // 🔥 ADD FLASH SELL FIELDS
         "fl-price": data['fl-price'] ?? null,
         "oldPrice": data['oldPrice'] ?? null,
         "flash-expire": data['flash-expire'] ?? null,
@@ -54,7 +52,6 @@ class DatabaseService {
     });
   }
 
-  // New methods for product names collection
   Future<void> _updateNamesDocument(List<String> names) async {
     await _db.collection('product_names').doc(_namesDocId).set({
       'names': names,
@@ -132,7 +129,6 @@ class DatabaseService {
         if (toVerify != null && toVerify.isNotEmpty) {
           for (final order in toVerify) {
             if (order is Map<String, dynamic>) {
-              // Create a proper order object with user info
               final orderWithUserInfo = {
                 ...order,
                 'user_document_id': userDoc.id,
@@ -151,7 +147,6 @@ class DatabaseService {
         final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
         final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
-        // For descending order (latest first)
         return timestampB.compareTo(timestampA);
       });
 
@@ -181,7 +176,7 @@ class DatabaseService {
         if (toShip != null && toShip.isNotEmpty) {
           for (final order in toShip) {
             if (order is Map<String, dynamic>) {
-              // Create a proper order object with user info
+
               final orderWithUserInfo = {
                 ...order,
                 'user_document_id': userDoc.id,
@@ -200,7 +195,7 @@ class DatabaseService {
         final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
         final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
-        // For descending order (latest first)
+
         return timestampB.compareTo(timestampA);
       });
 
@@ -230,7 +225,7 @@ class DatabaseService {
         if (toShip != null && toShip.isNotEmpty) {
           for (final order in toShip) {
             if (order is Map<String, dynamic>) {
-              // Create a proper order object with user info
+
               final orderWithUserInfo = {
                 ...order,
                 'user_document_id': userDoc.id,
@@ -249,7 +244,6 @@ class DatabaseService {
         final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
         final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
-        // For descending order (latest first)
         return timestampB.compareTo(timestampA);
       });
 
@@ -269,7 +263,6 @@ class DatabaseService {
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    // Find the user document by email
     final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
@@ -287,13 +280,10 @@ class DatabaseService {
       final toVerify = List<dynamic>.from(data['to_verify'] ?? []);
       final toShip = List<dynamic>.from(data['to_ship'] ?? []);
 
-      // Move all orders from to_verify to to_ship
       toShip.addAll(toVerify);
 
-      // Clear to_verify array
       toVerify.clear();
 
-      // Update Firestore document
       transaction.update(userDoc, {
         'to_verify': toVerify,
         'to_ship': toShip,
@@ -309,7 +299,6 @@ class DatabaseService {
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    // Find the user document by email
     final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
@@ -327,13 +316,10 @@ class DatabaseService {
       final toShip = List<dynamic>.from(data['to_ship'] ?? []);
       final completed = List<dynamic>.from(data['completed'] ?? []);
 
-      // Move all orders from to_ship to completed
+
       completed.addAll(toShip);
 
-      // Clear to_ship array
       toShip.clear();
-
-      // Update Firestore document
       transaction.update(userDoc, {
         'to_ship': toShip,
         'completed': completed,
@@ -347,7 +333,6 @@ class DatabaseService {
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    // Find the user document by email
     final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
@@ -360,7 +345,6 @@ class DatabaseService {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) throw Exception("User document not found");
 
-      // Clear the entire to_verify array
       transaction.update(userDoc, {
         'to_verify': [],
       });
@@ -373,7 +357,7 @@ class DatabaseService {
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    // Find the user document by email
+
     final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
@@ -386,7 +370,6 @@ class DatabaseService {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) throw Exception("User document not found");
 
-      // Clear the entire to_ship array
       transaction.update(userDoc, {
         'to_ship': [],
       });
@@ -397,7 +380,7 @@ class DatabaseService {
 
 
 
-// Real-time verify count
+
   Stream<int> getVerifyCountStream() {
     return _db
         .collection('users')
@@ -406,7 +389,7 @@ class DatabaseService {
         .map((snapshot) => snapshot.size);
   }
 
-// Real-time shipping count
+
   Stream<int> getShippingCountStream() {
     return _db
         .collection('users')
@@ -414,7 +397,7 @@ class DatabaseService {
         .snapshots()
         .map((snapshot) => snapshot.size);
   }
-  // Real-time Total download count
+
   Future<int> getTotalDownloadCount() async {
     final aggregate = await _db.collection('anonymous_users').count().get();
     return aggregate.count ?? 0;
@@ -434,7 +417,6 @@ class DatabaseService {
   }
 
 
-// Get recent logins from both collections
   Stream<List<QueryDocumentSnapshot>> getRecentLogins() {
     final usersStream = _db.collection('users')
         .orderBy('lastLogin', descending: true)
@@ -462,7 +444,6 @@ class DatabaseService {
     });
   }
 
-// Update today logins count method
   Future<int> getTodayLogins() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
@@ -479,7 +460,7 @@ class DatabaseService {
     return users.size + anonymous.size;
   }
 
-  // Add to DatabaseService
+
   Stream<int> getTodayLoginsStream() {
     final controller = StreamController<int>();
     StreamSubscription<QuerySnapshot>? usersSub;
@@ -489,7 +470,6 @@ class DatabaseService {
     void startListening(DateTime dayStart) {
       final startTimestamp = Timestamp.fromDate(dayStart);
 
-      // Users collection
       final usersQuery = _db
           .collection('users')
           .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp);
@@ -506,37 +486,34 @@ class DatabaseService {
         }
       }
 
-      // Listen to users collection
       usersSub = usersQuery.snapshots().listen((snapshot) {
         userCount = snapshot.size;
         updateTotal();
       });
 
-      // Listen to anonymous collection
       anonymousSub = anonymousQuery.snapshots().listen((snapshot) {
         anonymousCount = snapshot.size;
         updateTotal();
       });
 
-      // Schedule next day reset
+
       final nextMidnight = dayStart.add(const Duration(days: 1));
       dayChangeTimer = Timer(
         nextMidnight.difference(DateTime.now()),
             () {
           usersSub?.cancel();
           anonymousSub?.cancel();
-          startListening(nextMidnight); // Restart for new day
+          startListening(nextMidnight);
         },
       );
     }
 
-    // Initialize with current day
+
     controller.onListen = () {
       final now = DateTime.now();
       startListening(DateTime(now.year, now.month, now.day));
     };
 
-    // Cleanup resources
     controller.onCancel = () {
       usersSub?.cancel();
       anonymousSub?.cancel();
@@ -589,9 +566,6 @@ class DatabaseService {
   }
 
 
-  // Add these methods to your DatabaseService class
-
-// Banner management methods
   Future<List<Map<String, dynamic>>> getBanners() async {
     try {
       QuerySnapshot querySnapshot = await _db
