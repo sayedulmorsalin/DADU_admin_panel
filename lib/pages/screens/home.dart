@@ -4,6 +4,7 @@ import 'package:dadu_admin_panel/pages/screens/delivered.dart';
 import 'package:dadu_admin_panel/pages/screens/add_page.dart';
 import 'package:dadu_admin_panel/pages/screens/flash_sell.dart';
 import 'package:dadu_admin_panel/pages/screens/search.dart';
+import 'package:dadu_admin_panel/pages/screens/send_notification.dart';
 import 'package:dadu_admin_panel/pages/screens/shipping.dart';
 import 'package:dadu_admin_panel/pages/screens/update_payment.dart';
 import 'package:dadu_admin_panel/pages/screens/verify.dart';
@@ -238,7 +239,7 @@ class _AdminHomeState extends State<AdminHome> {
                 label: "Send notification",
                 count: null,
                 color: const Color.fromARGB(255, 141, 101, 148),
-                onPressed: () => _navigateToSearchUser(context),
+                onPressed: () => _navigateToSendNotification(context),
               ),
             ],
           ),
@@ -520,6 +521,13 @@ class _AdminHomeState extends State<AdminHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => UpdatePayment()),
+    );
+  }
+
+  void _navigateToSendNotification(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SendNotification()),
     );
   }
 }
