@@ -607,5 +607,20 @@ class DatabaseService {
       rethrow;
     }
   }
+
+Future<void> setPaymentNumber(String number) async {
+  await FirebaseFirestore.instance
+      .collection("paymentNumber")
+      .doc('9O1UpVqUrdyuTqiA3YQH')
+      .set(
+    {
+      'number': number,
+      'updatedAt': FieldValue.serverTimestamp(), // optional but recommended
+    },
+    SetOptions(merge: true),
+  );
+}
+
+  
 }
 

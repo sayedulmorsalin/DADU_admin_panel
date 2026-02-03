@@ -43,6 +43,7 @@ dependencies:
   flutter_plugin_android_lifecycle: ^2.0.19
   clipboard: ^2.0.2
   flutter_dotenv: ^6.0.0
+  shared_preferences: ^2.5.4
 
 
 dev_dependencies:

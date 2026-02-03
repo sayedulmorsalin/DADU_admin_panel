@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/database_service.dart';
@@ -14,8 +15,17 @@ class _AddPageState extends State<AddPage> {
   final DatabaseService _dbService = DatabaseService();
   final ImageUploadService _imageService = ImageUploadService();
   List<Map<String, dynamic>> products = [];
-  final List<String> brands = ['Adidas', 'Nike', 'Puma', 'Gloves', 'Other_boots', 'Jersey', 'Pant', 'Others'];
-
+  final List<String> brands = [
+    'Adidas',
+    'Nike',
+    'Puma',
+    'Gloves',
+    'Other_boots',
+    'Jersey',
+    'Pant',
+    'Dadu',
+    'Others',
+  ];
 
   final TextEditingController _addNameController = TextEditingController();
   final TextEditingController _addPriceController = TextEditingController();
@@ -25,7 +35,6 @@ class _AddPageState extends State<AddPage> {
   String? _addErrorMessage;
   String _selectedBrand = 'Adidas';
   bool _isUploading = false;
-
 
   late TextEditingController _editNameController;
   late TextEditingController _editPriceController;
@@ -60,7 +69,9 @@ class _AddPageState extends State<AddPage> {
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showEditDialog(int index) {
@@ -72,10 +83,7 @@ class _AddPageState extends State<AddPage> {
     _editSelectedBrand = _editingProduct!['brand'] ?? 'Others';
     _editErrorMessage = null;
 
-    showDialog(
-      context: context,
-      builder: (context) => _buildEditDialog(index),
-    );
+    showDialog(context: context, builder: (context) => _buildEditDialog(index));
   }
 
   Widget _buildEditDialog(int index) {
@@ -138,12 +146,10 @@ class _AddPageState extends State<AddPage> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _editSelectedBrand,
-              items: brands.map((brand) {
-                return DropdownMenuItem(
-                  value: brand,
-                  child: Text(brand),
-                );
-              }).toList(),
+              items:
+                  brands.map((brand) {
+                    return DropdownMenuItem(value: brand, child: Text(brand));
+                  }).toList(),
               onChanged: (value) {
                 setState(() {
                   _editSelectedBrand = value!;
@@ -180,6 +186,7 @@ class _AddPageState extends State<AddPage> {
 
     try {
       final oldName = products[index]['name'];
+
       final updatedProduct = {
         ...products[index],
         "name": _editNameController.text,
@@ -187,25 +194,21 @@ class _AddPageState extends State<AddPage> {
         "details": _editDetailsController.text,
         "brand": _editSelectedBrand,
         "videoLink": _editVideoController.text,
+        "updatedAt": FieldValue.serverTimestamp(),
       };
 
-
-      await _dbService.updateProduct(
-        updatedProduct['id'],
-        {
-          'name': updatedProduct['name'],
-          'price': updatedProduct['price'],
-          'details': updatedProduct['details'],
-          'brand': updatedProduct['brand'],
-          'videoLink': updatedProduct['videoLink'],
-        },
-      );
-
+      await _dbService.updateProduct(updatedProduct['id'], {
+        'name': updatedProduct['name'],
+        'price': updatedProduct['price'],
+        'details': updatedProduct['details'],
+        'brand': updatedProduct['brand'],
+        'videoLink': updatedProduct['videoLink'],
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       if (oldName != updatedProduct['name']) {
         await _dbService.updateProductName(oldName, updatedProduct['name']);
       }
-
 
       setState(() => products[index] = updatedProduct);
       Navigator.pop(context);
@@ -221,48 +224,47 @@ class _AddPageState extends State<AddPage> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirm Deletion"),
-        content: const Text("Are you sure you want to delete this product?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("Confirm Deletion"),
+            content: const Text(
+              "Are you sure you want to delete this product?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    final imageService = ImageUploadService();
+                    String img5 = products[index]['image5'];
+                    String img20 = products[index]['image20'];
+
+                    await imageService.deleteImage(img5);
+                    await imageService.deleteImage(img20);
+
+                    await _dbService.deleteProduct(products[index]['id']);
+
+                    await _dbService.removeProductName(productName);
+
+                    setState(() => products.removeAt(index));
+
+                    Navigator.pop(context);
+                  } catch (e) {
+                    _showSnackBar("Deletion failed: ${e.toString()}");
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text("Delete"),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final imageService = ImageUploadService();
-                String img5 = products[index]['image5'];
-                String img20 = products[index]['image20'];
-
-                await imageService.deleteImage(img5);
-                await imageService.deleteImage(img20);
-
-
-                await _dbService.deleteProduct(products[index]['id']);
-
-
-                await _dbService.removeProductName(productName);
-
-
-                setState(() => products.removeAt(index));
-
-                Navigator.pop(context);
-              } catch (e) {
-                _showSnackBar("Deletion failed: ${e.toString()}");
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
     );
   }
 
   void _showAddProductSheet() {
-
     _addNameController.clear();
     _addPriceController.clear();
     _addDetailsController.clear();
@@ -310,12 +312,18 @@ class _AddPageState extends State<AddPage> {
                   ),
                 ),
               _pickedImage != null
-                  ? Image.file(File(_pickedImage!.path), height: 200, fit: BoxFit.cover)
+                  ? Image.file(
+                    File(_pickedImage!.path),
+                    height: 200,
+                    fit: BoxFit.cover,
+                  )
                   : const Icon(Icons.image, size: 100, color: Colors.grey),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () async {
-                  final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                  final image = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                  );
                   if (image != null) {
                     setState(() {
                       _pickedImage = image;
@@ -364,12 +372,10 @@ class _AddPageState extends State<AddPage> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedBrand,
-                items: brands.map((brand) {
-                  return DropdownMenuItem(
-                    value: brand,
-                    child: Text(brand),
-                  );
-                }).toList(),
+                items:
+                    brands.map((brand) {
+                      return DropdownMenuItem(value: brand, child: Text(brand));
+                    }).toList(),
                 onChanged: (value) {
                   setState(() {
                     _selectedBrand = value!;
@@ -383,16 +389,17 @@ class _AddPageState extends State<AddPage> {
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _isUploading ? null : _addProduct,
-                icon: _isUploading
-                    ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-                    : const Icon(Icons.add),
+                icon:
+                    _isUploading
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : const Icon(Icons.add),
                 label: Text(_isUploading ? "Uploading..." : "Add Product"),
               ),
             ],
@@ -435,18 +442,14 @@ class _AddPageState extends State<AddPage> {
         "image20": urls['url20'],
       };
 
-
       final docRef = await _dbService.addProduct(newProduct);
 
+      await _dbService.addProductName(newProduct['name'] ?? "no name");
 
-      await _dbService.addProductName(newProduct['name']??"no name");
-
-
-      setState(() => products.insert(0, {
-        ...newProduct,
-        'id': docRef.id,
-        'clicked': 0,
-      }));
+      setState(
+        () =>
+            products.insert(0, {...newProduct, 'id': docRef.id, 'clicked': 0}),
+      );
       Navigator.pop(context);
     } catch (e) {
       setState(() {
@@ -466,19 +469,21 @@ class _AddPageState extends State<AddPage> {
         onPressed: _showAddProductSheet,
         child: const Icon(Icons.add),
       ),
-      body: products.isEmpty
-          ? const Center(child: Text("No products found"))
-          : Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView.builder(
-          itemCount: products.length,
-          itemBuilder: (context, index) => ProductCard(
-            product: products[index],
-            onEdit: () => _showEditDialog(index),
-            onDelete: () => _deleteProduct(index),
-          ),
-        ),
-      ),
+      body:
+          products.isEmpty
+              ? const Center(child: Text("No products found"))
+              : Padding(
+                padding: const EdgeInsets.all(16),
+                child: ListView.builder(
+                  itemCount: products.length,
+                  itemBuilder:
+                      (context, index) => ProductCard(
+                        product: products[index],
+                        onEdit: () => _showEditDialog(index),
+                        onDelete: () => _deleteProduct(index),
+                      ),
+                ),
+              ),
     );
   }
 

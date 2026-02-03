@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/database_service.dart';
+
 class GiftItem extends StatefulWidget {
   const GiftItem({super.key});
 
@@ -9,7 +10,6 @@ class GiftItem extends StatefulWidget {
 }
 
 class _GiftItemState extends State<GiftItem> {
-
   DatabaseService _dbService = DatabaseService();
   List<Map<String, dynamic>> products = [];
 
@@ -17,7 +17,6 @@ class _GiftItemState extends State<GiftItem> {
   void initState() {
     super.initState();
     _loadProducts();
-
   }
 
   Future<void> _loadProducts() async {
@@ -29,16 +28,13 @@ class _GiftItemState extends State<GiftItem> {
     }
   }
 
-
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-
   void showTextDateTimeDialog(Map<String, dynamic> product) {
-
     showDialog(
       context: context,
       builder: (context) {
@@ -54,13 +50,10 @@ class _GiftItemState extends State<GiftItem> {
 
                 ElevatedButton(
                   onPressed: () async {
-
                     final String productId = product["id"];
 
                     try {
-                      await _dbService.updateProduct(productId, {
-                        "gift": true,
-                      });
+                      await _dbService.updateProduct(productId, {"gift": true});
 
                       _showSnackBar("Gift updated successfully!");
                       _loadProducts();
@@ -77,7 +70,6 @@ class _GiftItemState extends State<GiftItem> {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +92,6 @@ class _GiftItemState extends State<GiftItem> {
           itemBuilder: (context, index) {
             final product = products[index];
 
-
             return Card(
               elevation: 4,
               margin: EdgeInsets.all(10),
@@ -121,8 +112,9 @@ class _GiftItemState extends State<GiftItem> {
                             height: 120,
                             width: 120,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                Icon(Icons.broken_image, size: 80),
+                            errorBuilder:
+                                (_, __, ___) =>
+                                    Icon(Icons.broken_image, size: 80),
                           ),
                         ),
                         SizedBox(width: 12),
@@ -134,16 +126,18 @@ class _GiftItemState extends State<GiftItem> {
                               Text(
                                 product["name"] ?? "No name",
                                 style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               SizedBox(height: 5),
 
-                              Text("Price: ${product["price"]}",
-                                  style: TextStyle(fontSize: 16)),
+                              Text(
+                                "Price: ${product["price"]}",
+                                style: TextStyle(fontSize: 16),
+                              ),
 
                               SizedBox(height: 6),
-
                             ],
                           ),
                         ),
@@ -158,7 +152,7 @@ class _GiftItemState extends State<GiftItem> {
                           child: Text("Gift"),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),

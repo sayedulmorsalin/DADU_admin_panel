@@ -5,6 +5,7 @@ import 'package:dadu_admin_panel/pages/screens/add_page.dart';
 import 'package:dadu_admin_panel/pages/screens/flash_sell.dart';
 import 'package:dadu_admin_panel/pages/screens/search.dart';
 import 'package:dadu_admin_panel/pages/screens/shipping.dart';
+import 'package:dadu_admin_panel/pages/screens/update_payment.dart';
 import 'package:dadu_admin_panel/pages/screens/verify.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -20,11 +21,12 @@ class AdminDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('DADU Admin Panel',
+        title: const Text(
+          'DADU Admin Panel',
           style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Colors.yellow
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: Colors.yellow,
           ),
         ),
         centerTitle: true,
@@ -91,7 +93,8 @@ class _AdminHomeState extends State<AdminHome> {
                     count: snapshot.data ?? 0,
                     icon: Icons.people,
                     color: Colors.blue,
-                    isLoading: snapshot.connectionState == ConnectionState.waiting,
+                    isLoading:
+                        snapshot.connectionState == ConnectionState.waiting,
                   );
                 },
               ),
@@ -103,7 +106,8 @@ class _AdminHomeState extends State<AdminHome> {
                     count: snapshot.data ?? 0,
                     icon: Icons.download,
                     color: Colors.green,
-                    isLoading: snapshot.connectionState == ConnectionState.waiting,
+                    isLoading:
+                        snapshot.connectionState == ConnectionState.waiting,
                   );
                 },
               ),
@@ -181,8 +185,6 @@ class _AdminHomeState extends State<AdminHome> {
                 color: Colors.deepPurple,
                 onPressed: () => _navigateToFlashSell(context),
               ),
-
-
             ],
           ),
 
@@ -211,7 +213,33 @@ class _AdminHomeState extends State<AdminHome> {
                 color: Colors.purple,
                 onPressed: () => _navigateToSearchUser(context),
               ),
-
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildActionButton(
+                icon: Icons.update,
+                label: "Update payment",
+                count: null,
+                color: const Color.fromARGB(255, 249, 226, 119),
+                onPressed: () => _navigateToUpdatePayment(context),
+              ),
+              _buildActionButton(
+                icon: Icons.card_giftcard,
+                label: "Draw gift",
+                count: null,
+                color: const Color.fromARGB(255, 102, 140, 172),
+                onPressed: () => _navigateToGiftItem(context),
+              ),
+              _buildActionButton(
+                icon: Icons.notification_add,
+                label: "Send notification",
+                count: null,
+                color: const Color.fromARGB(255, 141, 101, 148),
+                onPressed: () => _navigateToSearchUser(context),
+              ),
             ],
           ),
 
@@ -241,16 +269,17 @@ class _AdminHomeState extends State<AdminHome> {
               border: Border.all(color: Colors.blue, width: 3),
             ),
             child: Center(
-              child: isLoading
-                  ? const CircularProgressIndicator(color: Colors.blue)
-                  : Text(
-                count.toString(),
-                style: const TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
+              child:
+                  isLoading
+                      ? const CircularProgressIndicator(color: Colors.blue)
+                      : Text(
+                        count.toString(),
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
             ),
           ),
         ],
@@ -292,13 +321,13 @@ class _AdminHomeState extends State<AdminHome> {
             isLoading
                 ? const CircularProgressIndicator()
                 : Text(
-              count.toString(),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
           ],
         ),
       ),
@@ -356,10 +385,7 @@ class _AdminHomeState extends State<AdminHome> {
         const SizedBox(height: 8),
         Text(
           label,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: color),
         ),
       ],
     );
@@ -408,13 +434,15 @@ class _AdminHomeState extends State<AdminHome> {
                     final user = users[index];
                     final data = user.data() as Map<String, dynamic>;
 
-                    // Handle different user types
                     final email = data['email'] ?? 'Anonymous User';
                     final timestamp = data['lastLogin'] as Timestamp?;
 
-                    final time = timestamp != null
-                        ? DateFormat('MMM dd, hh:mm a').format(timestamp.toDate())
-                        : 'Unknown';
+                    final time =
+                        timestamp != null
+                            ? DateFormat(
+                              'MMM dd, hh:mm a',
+                            ).format(timestamp.toDate())
+                            : 'Unknown';
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -435,17 +463,11 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   void _navigateToAddProduct(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AddPage()),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => AddPage()));
   }
 
   void _navigateToSearchUser(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => Search()),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => Search()));
   }
 
   void _navigateToFlashSell(BuildContext context) {
@@ -456,10 +478,7 @@ class _AdminHomeState extends State<AdminHome> {
   }
 
   void _navigateToVerification(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => Verify()),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => Verify()));
   }
 
   void _navigateToShipping(BuildContext context) {
@@ -494,6 +513,13 @@ class _AdminHomeState extends State<AdminHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => GiftItem()),
+    );
+  }
+
+  void _navigateToUpdatePayment(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => UpdatePayment()),
     );
   }
 }
