@@ -621,6 +621,53 @@ Future<void> setPaymentNumber(String number) async {
   );
 }
 
+
+  Future<List<Map<String, dynamic>>> getAllFreeGiftRecevier() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('gift', isEqualTo: true)
+          .get();
+
+      List<Map<String, dynamic>> allReceivers = [];
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        allReceivers.add(data);
+      }
+
+      return allReceivers;
+    } catch (e) {
+      print('Error getting free gift receivers: $e');
+      return [];
+    }
+  }
+
+  Future<void> closeGiftDraw() async {
+    try {
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('gift', isEqualTo: true)
+          .get();
+
+      for (final doc in usersSnapshot.docs) {
+        await doc.reference.update({'gift': false});
+      }
+
+      final productsSnapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where('freeGift', isEqualTo: true)
+          .get();
+
+      for (final doc in productsSnapshot.docs) {
+        await doc.reference.update({'freeGift': false});
+      }
+    } catch (e) {
+      print('Error closing gift draw: $e');
+      rethrow;
+    }
+  }
   
 }
 

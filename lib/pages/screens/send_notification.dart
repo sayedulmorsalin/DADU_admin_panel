@@ -12,7 +12,6 @@ class _SendNotificationState extends State<SendNotification> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _userIdController = TextEditingController();
-  final TextEditingController _deepLinkController = TextEditingController();
   final TextEditingController _segmentController = TextEditingController();
 
   static const List<String> _audiences = <String>[
@@ -30,7 +29,6 @@ class _SendNotificationState extends State<SendNotification> {
     _titleController.clear();
     _messageController.clear();
     _userIdController.clear();
-    _deepLinkController.clear();
     _segmentController.clear();
     setState(() {
       _selectedAudience = _audiences.first;
@@ -58,9 +56,9 @@ class _SendNotificationState extends State<SendNotification> {
   Future<void> _sendNotification() async {
     final String? error = _validateForm();
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -71,7 +69,6 @@ class _SendNotificationState extends State<SendNotification> {
     final Map<String, dynamic> payload = <String, dynamic>{
       'title': _titleController.text.trim(),
       'body': _messageController.text.trim(),
-      'deepLink': _deepLinkController.text.trim(),
       'audience': _selectedAudience,
       'userId': _userIdController.text.trim(),
       'segment': _segmentController.text.trim(),
@@ -93,9 +90,9 @@ class _SendNotificationState extends State<SendNotification> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
     } finally {
       if (!mounted) {
         return;
@@ -111,7 +108,6 @@ class _SendNotificationState extends State<SendNotification> {
     _titleController.dispose();
     _messageController.dispose();
     _userIdController.dispose();
-    _deepLinkController.dispose();
     _segmentController.dispose();
     super.dispose();
   }
@@ -196,19 +192,6 @@ class _SendNotificationState extends State<SendNotification> {
                                 labelText: 'Message',
                                 alignLabelWithHint: true,
                                 prefixIcon: const Icon(Icons.message_outlined),
-                                filled: true,
-                                fillColor: colors.surfaceContainerHighest,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _deepLinkController,
-                              decoration: InputDecoration(
-                                labelText: 'Deep Link (optional)',
-                                prefixIcon: const Icon(Icons.link_outlined),
                                 filled: true,
                                 fillColor: colors.surfaceContainerHighest,
                                 border: OutlineInputBorder(

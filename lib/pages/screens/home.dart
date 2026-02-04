@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dadu_admin_panel/pages/screens/banner.dart';
 import 'package:dadu_admin_panel/pages/screens/delivered.dart';
 import 'package:dadu_admin_panel/pages/screens/add_page.dart';
+import 'package:dadu_admin_panel/pages/screens/draw.dart';
 import 'package:dadu_admin_panel/pages/screens/flash_sell.dart';
 import 'package:dadu_admin_panel/pages/screens/search.dart';
 import 'package:dadu_admin_panel/pages/screens/send_notification.dart';
@@ -232,7 +233,7 @@ class _AdminHomeState extends State<AdminHome> {
                 label: "Draw gift",
                 count: null,
                 color: const Color.fromARGB(255, 102, 140, 172),
-                onPressed: () => _navigateToGiftItem(context),
+                onPressed: () => _navigateToDraw(context),
               ),
               _buildActionButton(
                 icon: Icons.notification_add,
@@ -529,5 +530,9 @@ class _AdminHomeState extends State<AdminHome> {
       context,
       MaterialPageRoute(builder: (context) => SendNotification()),
     );
+  }
+
+  void _navigateToDraw(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => Draw()));
   }
 }

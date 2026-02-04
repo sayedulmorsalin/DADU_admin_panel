@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../services/database_service.dart';
 
 class GiftItem extends StatefulWidget {
@@ -53,10 +52,13 @@ class _GiftItemState extends State<GiftItem> {
                     final String productId = product["id"];
 
                     try {
-                      await _dbService.updateProduct(productId, {"gift": true});
+                      await _dbService.updateProduct(productId, {
+                        "freeGift": true,
+                      });
 
                       _showSnackBar("Gift updated successfully!");
                       _loadProducts();
+                      Navigator.pop(context);
                     } catch (e) {
                       _showSnackBar("Update failed: $e");
                     }
