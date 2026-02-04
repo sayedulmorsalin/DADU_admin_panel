@@ -11,18 +11,30 @@ class Draw extends StatefulWidget {
   State<Draw> createState() => _DrawState();
 }
 
-class _DrawState extends State<Draw> {
+class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
   final DatabaseService _dbService = DatabaseService();
   final Random _random = Random();
 
   List<Map<String, dynamic>> receivers = [];
   Map<String, dynamic>? selectedReceiver;
   bool isLoading = true;
+  bool isDrawing = false;
+  late final AnimationController _drawController;
 
   @override
   void initState() {
     super.initState();
+    _drawController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
     _loadReceivers();
+  }
+
+  @override
+  void dispose() {
+    _drawController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadReceivers() async {
@@ -49,15 +61,51 @@ class _DrawState extends State<Draw> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _drawWinner() {
+  Future<void> _drawWinner() async {
     if (receivers.isEmpty) {
       _showSnackBar("No users available for gift draw.");
       return;
     }
+    if (isDrawing) return;
+
+    setState(() {
+      isDrawing = true;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Drawing Winner"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RotationTransition(
+                turns: _drawController,
+                child: const Icon(
+                  Icons.casino,
+                  size: 48,
+                  color: Colors.orange,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text("Picking a lucky receiver..."),
+            ],
+          ),
+        );
+      },
+    );
+
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    Navigator.pop(context);
 
     final winner = receivers[_random.nextInt(receivers.length)];
     setState(() {
       selectedReceiver = winner;
+      isDrawing = false;
     });
 
     showDialog(
@@ -125,8 +173,6 @@ class _DrawState extends State<Draw> {
     final address = winner['address'] ?? 'N/A';
     final thana = winner['thana'] ?? 'N/A';
     final district = winner['district'] ?? 'N/A';
-    final id = winner['id'] ?? 'N/A';
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,7 +183,6 @@ class _DrawState extends State<Draw> {
         Text("Address: $address"),
         Text("Thana: $thana"),
         Text("District: $district"),
-        Text("User ID: $id"),
       ],
     );
   }
@@ -149,8 +194,6 @@ class _DrawState extends State<Draw> {
     final address = winner['address'] ?? 'N/A';
     final thana = winner['thana'] ?? 'N/A';
     final district = winner['district'] ?? 'N/A';
-    final id = winner['id'] ?? 'N/A';
-
     final summary = [
       "Name: $name",
       "Email: $email",
@@ -158,7 +201,6 @@ class _DrawState extends State<Draw> {
       "Address: $address",
       "Thana: $thana",
       "District: $district",
-      "User ID: $id",
     ].join('\n');
 
     try {
@@ -226,7 +268,7 @@ class _DrawState extends State<Draw> {
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: _drawWinner,
+                              onPressed: isDrawing ? null : _drawWinner,
                               icon: const Icon(Icons.card_giftcard),
                               label: const Text("Draw"),
                             ),
@@ -285,7 +327,6 @@ class _DrawState extends State<Draw> {
                                 "District",
                                 selectedReceiver!['district'],
                               ),
-                              _buildInfoRow("User ID", selectedReceiver!['id']),
                               const SizedBox(height: 8),
                               Align(
                                 alignment: Alignment.centerRight,
@@ -324,7 +365,6 @@ class _DrawState extends State<Draw> {
                           final address = receiver['address'] ?? 'N/A';
                           final thana = receiver['thana'] ?? 'N/A';
                           final district = receiver['district'] ?? 'N/A';
-                          final id = receiver['id'] ?? 'N/A';
 
                           return Card(
                             elevation: 2,
@@ -373,7 +413,6 @@ class _DrawState extends State<Draw> {
                                   _buildInfoRow("Address", address),
                                   _buildInfoRow("Thana", thana),
                                   _buildInfoRow("District", district),
-                                  _buildInfoRow("User ID", id),
                                 ],
                               ),
                             ),
