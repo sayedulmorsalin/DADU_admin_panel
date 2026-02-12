@@ -24,7 +24,9 @@ class _AddPageState extends State<AddPage> {
     'Jersey',
     'Pant',
     'Dadu',
+    'Bundle',
     'Others',
+
   ];
 
   final TextEditingController _addNameController = TextEditingController();
