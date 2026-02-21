@@ -66,6 +66,7 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
       _showSnackBar("No users available for gift draw.");
       return;
     }
+
     if (isDrawing) return;
 
     setState(() {
@@ -74,22 +75,25 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
 
     showDialog(
       context: context,
+
       barrierDismissible: false,
+
       builder: (context) {
         return AlertDialog(
           title: const Text("Drawing Winner"),
+
           content: Column(
             mainAxisSize: MainAxisSize.min,
+
             children: [
               RotationTransition(
                 turns: _drawController,
-                child: const Icon(
-                  Icons.casino,
-                  size: 48,
-                  color: Colors.orange,
-                ),
+
+                child: const Icon(Icons.casino, size: 48, color: Colors.orange),
               ),
+
               const SizedBox(height: 12),
+
               const Text("Picking a lucky receiver..."),
             ],
           ),
@@ -98,29 +102,45 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
     );
 
     await Future.delayed(const Duration(seconds: 2));
+
     if (!mounted) return;
 
     Navigator.pop(context);
 
     final winner = receivers[_random.nextInt(receivers.length)];
+
+    try {
+      /// ⭐ UPDATE DATABASE HERE
+      await _dbService.updateGiftWinner(winner);
+    } catch (e) {
+      _showSnackBar("Database update failed: $e");
+    }
+
     setState(() {
       selectedReceiver = winner;
+
       isDrawing = false;
     });
 
     showDialog(
       context: context,
+
       builder: (context) {
         return AlertDialog(
           title: const Text("Gift Winner"),
+
           content: _buildWinnerContent(winner),
+
           actions: [
             TextButton(
               onPressed: () => _copyWinnerInfo(winner),
+
               child: const Text("Copy"),
             ),
+
             TextButton(
               onPressed: () => Navigator.pop(context),
+
               child: const Text("Close"),
             ),
           ],

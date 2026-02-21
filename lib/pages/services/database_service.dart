@@ -668,6 +668,35 @@ Future<void> setPaymentNumber(String number) async {
       rethrow;
     }
   }
+
+  Future<void> updateGiftWinner(
+    Map<String, dynamic> winner) async {
+
+  await FirebaseFirestore.instance
+      .collection("free_gift")
+      .doc("winner")
+      .set({
+
+    "name":
+    winner['name'] ??
+        winner['user_name'] ??
+        "Unknown",
+
+    /// combine district + thana
+    "location":
+    "${winner['district'] ?? ''} ${winner['thana'] ?? ''}"
+        .trim(),
+
+    "user_id":
+    winner['user_id'] ??
+        winner['uid'] ??
+        "",
+
+    "time":
+    FieldValue.serverTimestamp(),
+
+  }, SetOptions(merge: true));
+}
   
 }
 
