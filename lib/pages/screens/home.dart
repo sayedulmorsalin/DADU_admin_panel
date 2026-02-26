@@ -54,6 +54,9 @@ class _AdminHomeState extends State<AdminHome> {
   late Stream<int> deliveredCount;
   late final downloadCount;
   late final accountCount;
+  late Stream<Map<String, dynamic>> adAnalyticsStream;
+  late String _selectedMonthKey;
+  late List<String> _monthKeys;
 
   @override
   void initState() {
@@ -64,6 +67,16 @@ class _AdminHomeState extends State<AdminHome> {
     deliveredCount = _dbService.getCompletedCountStream();
     downloadCount = _dbService.getTotalDownloadCount();
     accountCount = _dbService.getTotalRegisteredCountStream();
+    adAnalyticsStream = _dbService.getAdAnalyticsStream();
+
+    final now = DateTime.now();
+    final currentMonthKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+    final prevMonth = DateTime(now.year, now.month - 1, 1);
+    final prevMonthKey =
+        "${prevMonth.year}-${prevMonth.month.toString().padLeft(2, '0')}";
+
+    _monthKeys = [currentMonthKey, prevMonthKey];
+    _selectedMonthKey = currentMonthKey;
   }
 
   @override
@@ -83,7 +96,51 @@ class _AdminHomeState extends State<AdminHome> {
             },
           ),
           const SizedBox(height: 20),
-
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("Select Month: ",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              DropdownButton<String>(
+                value: _selectedMonthKey,
+                items: _monthKeys.map<DropdownMenuItem<String>>((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedMonthKey = newValue!;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              StreamBuilder<Map<String, dynamic>>(
+                stream: adAnalyticsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Expanded(
+                        child: Center(child: CircularProgressIndicator()));
+                  }
+                  final adData = snapshot.data ?? {};
+                  final monthlyRewardAdCount = adData[_selectedMonthKey] ?? 0;
+                  return _buildCountCard(
+                    title: 'Monthly Reward Ads',
+                    count: monthlyRewardAdCount,
+                    icon: Icons.card_giftcard,
+                    color: Colors.redAccent,
+                    isLoading: false,
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -116,7 +173,6 @@ class _AdminHomeState extends State<AdminHome> {
             ],
           ),
           const SizedBox(height: 20),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -162,7 +218,6 @@ class _AdminHomeState extends State<AdminHome> {
             ],
           ),
           const SizedBox(height: 15),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -189,7 +244,6 @@ class _AdminHomeState extends State<AdminHome> {
               ),
             ],
           ),
-
           const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -244,7 +298,6 @@ class _AdminHomeState extends State<AdminHome> {
               ),
             ],
           ),
-
           const SizedBox(height: 30),
           _buildLastLoginList(),
         ],
@@ -271,17 +324,16 @@ class _AdminHomeState extends State<AdminHome> {
               border: Border.all(color: Colors.blue, width: 3),
             ),
             child: Center(
-              child:
-                  isLoading
-                      ? const CircularProgressIndicator(color: Colors.blue)
-                      : Text(
-                        count.toString(),
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
+              child: isLoading
+                  ? const CircularProgressIndicator(color: Colors.blue)
+                  : Text(
+                      count.toString(),
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
                       ),
+                    ),
             ),
           ),
         ],
@@ -323,13 +375,13 @@ class _AdminHomeState extends State<AdminHome> {
             isLoading
                 ? const CircularProgressIndicator()
                 : Text(
-                  count.toString(),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                    count.toString(),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
-                ),
           ],
         ),
       ),
@@ -439,12 +491,11 @@ class _AdminHomeState extends State<AdminHome> {
                     final email = data['email'] ?? 'Anonymous User';
                     final timestamp = data['lastLogin'] as Timestamp?;
 
-                    final time =
-                        timestamp != null
-                            ? DateFormat(
-                              'MMM dd, hh:mm a',
-                            ).format(timestamp.toDate())
-                            : 'Unknown';
+                    final time = timestamp != null
+                        ? DateFormat(
+                            'MMM dd, hh:mm a',
+                          ).format(timestamp.toDate())
+                        : 'Unknown';
 
                     return ListTile(
                       leading: CircleAvatar(

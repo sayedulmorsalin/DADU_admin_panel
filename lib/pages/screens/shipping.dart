@@ -116,7 +116,6 @@ class _ShippingState extends State<Shipping> {
           itemBuilder: (context, index) {
             final order = orders[index];
             final orderId = order['order_id'] as String? ?? '';
-            final controller = _pointControllers[orderId] ?? TextEditingController();
             final items = getItems(order);
             final userEmail = order['customerEmail'] ?? order['user_email'];
 
@@ -201,15 +200,6 @@ class _ShippingState extends State<Shipping> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
 
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: "Give point to user",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -247,7 +237,7 @@ class _ShippingState extends State<Shipping> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          onPressed: () => _deliverOrder(order, index, userEmail, controller.text),
+                          onPressed: () => _deliverOrder(order, index, userEmail),
                           child: const Text(
                             'Delivered',
                             style: TextStyle(
@@ -299,7 +289,7 @@ class _ShippingState extends State<Shipping> {
     }
   }
 
-  Future<void> _deliverOrder(Map<String, dynamic> order, int index, String? userEmail, String pointsText) async {
+  Future<void> _deliverOrder(Map<String, dynamic> order, int index, String? userEmail) async {
     try {
       if (userEmail == null) throw Exception("User email not found");
 
@@ -314,7 +304,7 @@ class _ShippingState extends State<Shipping> {
       }
 
       // Calculate and update points
-      int points = int.tryParse(pointsText) ?? 0;
+      int points = 10;
       int currentPoints = order['deliveryPoints'] ?? 0;
       int baseCharge = order['baseDeliveryCharge'] ?? 0;
 

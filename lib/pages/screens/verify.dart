@@ -493,10 +493,8 @@ class _VerifyState extends State<Verify> {
   Future<void> _rejectOrder(Map<String, dynamic> order, int index) async {
     try {
       final userEmail = order['customerEmail'] ?? order['user_email'];
-      final userDocumentId = order['user_document_id'];
-      final orderId = order['order_id'];
 
-      if (userDocumentId != null && orderId != null) {
+      if(true){
         await _databaseService.removeItemsFromVerify(userEmail: userEmail!);
       }
 

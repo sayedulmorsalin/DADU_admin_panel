@@ -698,5 +698,11 @@ Future<void> setPaymentNumber(String number) async {
   }, SetOptions(merge: true));
 }
   
+  Stream<Map<String, dynamic>> getAdAnalyticsStream() {
+    return _db
+        .collection("ad_analytics")
+        .doc("monthly_reward_ads")
+        .snapshots()
+        .map((snapshot) => snapshot.data() ?? {});
+  }
 }
-
