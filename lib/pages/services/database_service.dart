@@ -6,8 +6,6 @@ class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final String _namesDocId = 'all_product_names';
 
-
-
   Future<List<Map<String, dynamic>>> getProducts() async {
     final snapshot = await _db
         .collection('products')
@@ -35,7 +33,6 @@ class DatabaseService {
     }).toList();
   }
 
-
   Future<void> updateProduct(String id, Map<String, dynamic> data) {
     return _db.collection('products').doc(id).update(data);
   }
@@ -43,7 +40,6 @@ class DatabaseService {
   Future<void> deleteProduct(String id) {
     return _db.collection('products').doc(id).delete();
   }
-
 
   Future<DocumentReference> addProduct(Map<String, dynamic> data) {
     return _db.collection('products').add({
@@ -101,18 +97,16 @@ class DatabaseService {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
 
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('logins')
-            .where(
-              'timestamp',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-            )
-            .get();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('logins')
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .get();
 
     return snapshot.docs.length;
   }
-
 
   Future<List<Map<String, dynamic>>> getAllOrdersVerify() async {
     try {
@@ -145,21 +139,20 @@ class DatabaseService {
       }
 
       allOrders.sort((a, b) {
-        final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
+        final timestampA =
+            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
+        final timestampB =
+            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
         return timestampB.compareTo(timestampA);
       });
 
       return allOrders;
-
     } catch (e) {
       print('Error getting orders: $e');
       return [];
     }
   }
-
-
 
   Future<List<Map<String, dynamic>>> getAllShipped() async {
     try {
@@ -177,7 +170,6 @@ class DatabaseService {
         if (toShip != null && toShip.isNotEmpty) {
           for (final order in toShip) {
             if (order is Map<String, dynamic>) {
-
               final orderWithUserInfo = {
                 ...order,
                 'user_document_id': userDoc.id,
@@ -193,22 +185,20 @@ class DatabaseService {
       }
 
       allOrders.sort((a, b) {
-        final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
-
+        final timestampA =
+            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
+        final timestampB =
+            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
         return timestampB.compareTo(timestampA);
       });
 
       return allOrders;
-
     } catch (e) {
       print('Error getting orders: $e');
       return [];
     }
   }
-
-
 
   Future<List<Map<String, dynamic>>> getAllDelivered() async {
     try {
@@ -226,7 +216,6 @@ class DatabaseService {
         if (toShip != null && toShip.isNotEmpty) {
           for (final order in toShip) {
             if (order is Map<String, dynamic>) {
-
               final orderWithUserInfo = {
                 ...order,
                 'user_document_id': userDoc.id,
@@ -242,29 +231,28 @@ class DatabaseService {
       }
 
       allOrders.sort((a, b) {
-        final timestampA = a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB = b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
+        final timestampA =
+            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
+        final timestampB =
+            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
 
         return timestampB.compareTo(timestampA);
       });
 
       return allOrders;
-
     } catch (e) {
       print('Error getting orders: $e');
       return [];
     }
   }
 
-
-
-
   Future<void> moveItemsToShip({
     required String userEmail,
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
+    final querySnapshot =
+        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
       throw Exception("User not found for email: $userEmail");
@@ -292,15 +280,13 @@ class DatabaseService {
     });
   }
 
-
-
-
   Future<void> moveItemsToCompleted({
     required String userEmail,
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
+    final querySnapshot =
+        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
       throw Exception("User not found for email: $userEmail");
@@ -317,7 +303,6 @@ class DatabaseService {
       final toShip = List<dynamic>.from(data['to_ship'] ?? []);
       final completed = List<dynamic>.from(data['completed'] ?? []);
 
-
       completed.addAll(toShip);
 
       toShip.clear();
@@ -328,13 +313,13 @@ class DatabaseService {
     });
   }
 
-
   Future<void> removeItemsFromVerify({
     required String userEmail,
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-    final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
+    final querySnapshot =
+        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
       throw Exception("User not found for email: $userEmail");
@@ -352,14 +337,13 @@ class DatabaseService {
     });
   }
 
-
   Future<void> removeItemsFromShip({
     required String userEmail,
   }) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
-
-    final querySnapshot = await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
+    final querySnapshot =
+        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
 
     if (querySnapshot.docs.isEmpty) {
       throw Exception("User not found for email: $userEmail");
@@ -377,11 +361,6 @@ class DatabaseService {
     });
   }
 
-
-
-
-
-
   Stream<int> getVerifyCountStream() {
     return _db
         .collection('users')
@@ -389,7 +368,6 @@ class DatabaseService {
         .snapshots()
         .map((snapshot) => snapshot.size);
   }
-
 
   Stream<int> getShippingCountStream() {
     return _db
@@ -417,15 +395,16 @@ class DatabaseService {
         .map((snapshot) => snapshot.size);
   }
 
-
   Stream<List<QueryDocumentSnapshot>> getRecentLogins() {
-    final usersStream = _db.collection('users')
+    final usersStream = _db
+        .collection('users')
         .orderBy('lastLogin', descending: true)
         .limit(20)
         .snapshots()
         .map((snapshot) => snapshot.docs);
 
-    final anonymousStream = _db.collection('anonymous_users')
+    final anonymousStream = _db
+        .collection('anonymous_users')
         .orderBy('lastLogin', descending: true)
         .limit(20)
         .snapshots()
@@ -450,17 +429,18 @@ class DatabaseService {
     final startOfDay = DateTime(now.year, now.month, now.day);
     final startTimestamp = Timestamp.fromDate(startOfDay);
 
-    final users = await _db.collection('users')
+    final users = await _db
+        .collection('users')
         .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
         .get();
 
-    final anonymous = await _db.collection('anonymous_users')
+    final anonymous = await _db
+        .collection('anonymous_users')
         .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
         .get();
 
     return users.size + anonymous.size;
   }
-
 
   Stream<int> getTodayLoginsStream() {
     final controller = StreamController<int>();
@@ -497,18 +477,16 @@ class DatabaseService {
         updateTotal();
       });
 
-
       final nextMidnight = dayStart.add(const Duration(days: 1));
       dayChangeTimer = Timer(
         nextMidnight.difference(DateTime.now()),
-            () {
+        () {
           usersSub?.cancel();
           anonymousSub?.cancel();
           startListening(nextMidnight);
         },
       );
     }
-
 
     controller.onListen = () {
       final now = DateTime.now();
@@ -524,8 +502,6 @@ class DatabaseService {
     return controller.stream;
   }
 
-
-
   Future<Map<String, dynamic>?> getUserByEmail(String email) async {
     if (email.isEmpty) {
       throw ArgumentError('Email cannot be empty');
@@ -533,7 +509,8 @@ class DatabaseService {
 
     try {
       final usersRef = FirebaseFirestore.instance.collection('users');
-      final querySnapshot = await usersRef.where('email', isEqualTo: email).limit(1).get();
+      final querySnapshot =
+          await usersRef.where('email', isEqualTo: email).limit(1).get();
 
       if (querySnapshot.docs.isEmpty) {
         return null; // User not found
@@ -550,8 +527,8 @@ class DatabaseService {
     }
   }
 
-
-  Future<void> updateUserByEmail(String email, Map<String, dynamic> updatedData) async {
+  Future<void> updateUserByEmail(
+      String email, Map<String, dynamic> updatedData) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot = await usersRef.where('email', isEqualTo: email).get();
@@ -566,12 +543,9 @@ class DatabaseService {
     }
   }
 
-
   Future<List<Map<String, dynamic>>> getBanners() async {
     try {
-      QuerySnapshot querySnapshot = await _db
-          .collection('banners')
-          .get();
+      QuerySnapshot querySnapshot = await _db.collection('banners').get();
 
       return querySnapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
@@ -598,7 +572,6 @@ class DatabaseService {
     }
   }
 
-
   Future<void> deleteBanner(String bannerId) async {
     try {
       await _db.collection('banners').doc(bannerId).delete();
@@ -608,19 +581,18 @@ class DatabaseService {
     }
   }
 
-Future<void> setPaymentNumber(String number) async {
-  await FirebaseFirestore.instance
-      .collection("paymentNumber")
-      .doc('9O1UpVqUrdyuTqiA3YQH')
-      .set(
-    {
-      'number': number,
-      'updatedAt': FieldValue.serverTimestamp(), // optional but recommended
-    },
-    SetOptions(merge: true),
-  );
-}
-
+  Future<void> setPaymentNumber(String number) async {
+    await FirebaseFirestore.instance
+        .collection("paymentNumber")
+        .doc('9O1UpVqUrdyuTqiA3YQH')
+        .set(
+      {
+        'number': number,
+        'updatedAt': FieldValue.serverTimestamp(), // optional but recommended
+      },
+      SetOptions(merge: true),
+    );
+  }
 
   Future<List<Map<String, dynamic>>> getAllFreeGiftRecevier() async {
     try {
@@ -669,40 +641,59 @@ Future<void> setPaymentNumber(String number) async {
     }
   }
 
-  Future<void> updateGiftWinner(
-    Map<String, dynamic> winner) async {
+  Future<void> updateGiftWinner(Map<String, dynamic> winner) async {
+    await FirebaseFirestore.instance.collection("free_gift").doc("winner").set(
+      {
+        "name": winner['name'] ?? winner['user_name'] ?? "Unknown",
 
-  await FirebaseFirestore.instance
-      .collection("free_gift")
-      .doc("winner")
-      .set({
+        /// combine district + thana
+        "location":
+            "${winner['district'] ?? ''} ${winner['thana'] ?? ''}".trim(),
 
-    "name":
-    winner['name'] ??
-        winner['user_name'] ??
-        "Unknown",
+        "user_id": winner['user_id'] ?? winner['uid'] ?? "",
 
-    /// combine district + thana
-    "location":
-    "${winner['district'] ?? ''} ${winner['thana'] ?? ''}"
-        .trim(),
+        "time": FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
 
-    "user_id":
-    winner['user_id'] ??
-        winner['uid'] ??
-        "",
-
-    "time":
-    FieldValue.serverTimestamp(),
-
-  }, SetOptions(merge: true));
-}
-  
   Stream<Map<String, dynamic>> getAdAnalyticsStream() {
     return _db
         .collection("ad_analytics")
         .doc("monthly_reward_ads")
         .snapshots()
         .map((snapshot) => snapshot.data() ?? {});
+  }
+
+  Future<void> deleteCompletedOrder(
+      {required String userDocId, required Map<String, dynamic> orderData}) async {
+    final userRef = _db.collection('users').doc(userDocId);
+    try {
+      await _db.runTransaction((transaction) async {
+        final userSnapshot = await transaction.get(userRef);
+        if (!userSnapshot.exists) {
+          throw Exception("User not found");
+        }
+        final userData = userSnapshot.data();
+        if (userData == null) {
+          throw Exception("User data is null");
+        }
+
+        final completedOrders = List<dynamic>.from(userData['completed'] ?? []);
+
+        completedOrders.removeWhere((order) {
+          if (order is Map<String, dynamic>) {
+            return order['timestamp'] == orderData['timestamp'];
+          }
+          return false;
+        });
+
+        transaction.update(userRef, {'completed': completedOrders});
+      });
+    } catch (e) {
+      print("Error deleting order: $e");
+      rethrow;
+    }
   }
 }

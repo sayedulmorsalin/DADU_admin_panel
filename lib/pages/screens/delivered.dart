@@ -44,6 +44,40 @@ class _DeliveredState extends State<Delivered> {
     });
   }
 
+  Future<void> _deleteOrder(Map<String, dynamic> order) async {
+    final confirmed = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: const Text('Are you sure you want to delete this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _databaseService.deleteCompletedOrder(
+          userDocId: order['user_document_id'],
+          orderData: order,
+        );
+        fetchOrders(); // Refresh the list
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting order: $e')),
+        );
+      }
+    }
+  }
+
   // Safe method to get items list
   List<dynamic> getItems(Map<String, dynamic> order) {
     try {
@@ -178,8 +212,15 @@ class _DeliveredState extends State<Delivered> {
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
                   buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deleteOrder(order),
+                    ),
+                  ),
                 ],
-              ),
+              ), 
             ),
           );
         },
