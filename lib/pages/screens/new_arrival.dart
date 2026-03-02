@@ -29,6 +29,13 @@ class _NewArrivalState extends State<NewArrival> {
   Future<void> _loadProducts() async {
     try {
       final loadedProducts = await _dbService.getProducts();
+      loadedProducts.sort((a, b) {
+        final aIsNew = a['newArrival'] == true;
+        final bIsNew = b['newArrival'] == true;
+        if (aIsNew && !bIsNew) return -1;
+        if (!aIsNew && bIsNew) return 1;
+        return 0;
+      });
       setState(() => products = loadedProducts);
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
@@ -72,6 +79,13 @@ class _NewArrivalState extends State<NewArrival> {
 
                 setState(() {
                   product["newArrival"] = newValue;
+                  products.sort((a, b) {
+                    final aIsNew = a['newArrival'] == true;
+                    final bIsNew = b['newArrival'] == true;
+                    if (aIsNew && !bIsNew) return -1;
+                    if (!aIsNew && bIsNew) return 1;
+                    return 0;
+                  });
                 });
 
                 _showSnackBar(

@@ -65,6 +65,15 @@ class _FlashSellState extends State<FlashSell> {
   Future<void> _loadProducts() async {
     try {
       final loadedProducts = await _dbService.getProducts();
+      loadedProducts.sort((a, b) {
+        final isAFlash = a['flashSell'] == true && formatRemainingTime(a['flash-expire']) != "Expired";
+        final isBFlash = b['flashSell'] == true && formatRemainingTime(b['flash-expire']) != "Expired";
+
+        if (isAFlash && !isBFlash) return -1;
+        if (!isAFlash && isBFlash) return 1;
+
+        return 0;
+      });
       setState(() => products = loadedProducts);
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
