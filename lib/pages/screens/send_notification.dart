@@ -13,6 +13,7 @@ class _SendNotificationState extends State<SendNotification> {
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _segmentController = TextEditingController();
+  final Set<String> _deletingNotificationIds = <String>{};
 
   static const List<String> _audiences = <String>[
     'All Users',
@@ -72,6 +73,7 @@ class _SendNotificationState extends State<SendNotification> {
       'audience': _selectedAudience,
       'userId': _userIdController.text.trim(),
       'segment': _segmentController.text.trim(),
+      'sentBy': 'admin',
       'highPriority': _highPriority,
       'withSound': _withSound,
       'createdAt': FieldValue.serverTimestamp(),
@@ -99,6 +101,76 @@ class _SendNotificationState extends State<SendNotification> {
       }
       setState(() {
         _isSending = false;
+      });
+    }
+  }
+
+  String _formatCreatedAt(Timestamp? timestamp) {
+    if (timestamp == null) {
+      return 'Time unavailable';
+    }
+    final DateTime value = timestamp.toDate();
+    final String twoDigitMonth = value.month.toString().padLeft(2, '0');
+    final String twoDigitDay = value.day.toString().padLeft(2, '0');
+    final String twoDigitHour = value.hour.toString().padLeft(2, '0');
+    final String twoDigitMinute = value.minute.toString().padLeft(2, '0');
+    return '${value.year}-$twoDigitMonth-$twoDigitDay $twoDigitHour:$twoDigitMinute';
+  }
+
+  Future<void> _deleteNotification(String docId) async {
+    final bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      builder:
+          (BuildContext context) => AlertDialog(
+            title: const Text('Delete Notification'),
+            content: const Text(
+              'Are you sure you want to delete this notification?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    if (shouldDelete != true) {
+      return;
+    }
+
+    setState(() {
+      _deletingNotificationIds.add(docId);
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('notifications')
+          .doc(docId)
+          .delete();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notification deleted successfully.')),
+      );
+    } on Exception catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _deletingNotificationIds.remove(docId);
       });
     }
   }
@@ -421,6 +493,156 @@ class _SendNotificationState extends State<SendNotification> {
                           label: const Text('Clear'),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      elevation: 0,
+                      color: colors.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sent Notifications',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                              stream:
+                                  FirebaseFirestore.instance
+                                      .collection('notifications')
+                                      .orderBy('createdAt', descending: true)
+                                      .snapshots(),
+                              builder: (
+                                BuildContext context,
+                                AsyncSnapshot<
+                                  QuerySnapshot<Map<String, dynamic>>
+                                >
+                                snapshot,
+                              ) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+
+                                if (snapshot.hasError) {
+                                  return Text(
+                                    'Failed to load notifications: ${snapshot.error}',
+                                    style: TextStyle(
+                                      color: colors.error,
+                                    ),
+                                  );
+                                }
+
+                                final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                                docs = snapshot.data?.docs ?? [];
+
+                                if (docs.isEmpty) {
+                                  return const Text(
+                                    'No notifications have been sent yet.',
+                                  );
+                                }
+
+                                return ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: docs.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 16),
+                                  itemBuilder: (
+                                    BuildContext context,
+                                    int index,
+                                  ) {
+                                    final QueryDocumentSnapshot<
+                                      Map<String, dynamic>
+                                    >
+                                    doc = docs[index];
+                                    final Map<String, dynamic> data = doc.data();
+                                    final bool isDeleting =
+                                        _deletingNotificationIds.contains(
+                                          doc.id,
+                                        );
+
+                                    final String title =
+                                        (data['title'] as String?)?.trim().isNotEmpty == true
+                                            ? (data['title'] as String).trim()
+                                            : 'Untitled';
+                                    final String body =
+                                        (data['body'] as String?)?.trim() ?? '';
+                                    final String audience =
+                                        (data['audience'] as String?)?.trim() ??
+                                        'All Users';
+                                    final Timestamp? createdAt =
+                                        data['createdAt'] as Timestamp?;
+
+                                    return ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(title),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            body.isEmpty
+                                                ? 'No message body'
+                                                : body,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Audience: $audience | ${_formatCreatedAt(createdAt)}',
+                                            style:
+                                                Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: IconButton(
+                                        tooltip: 'Delete notification',
+                                        onPressed:
+                                            isDeleting
+                                                ? null
+                                                : () => _deleteNotification(
+                                                  doc.id,
+                                                ),
+                                        icon:
+                                            isDeleting
+                                                ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                                : const Icon(
+                                                  Icons.delete_outline,
+                                                ),
+                                        color: colors.error,
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
