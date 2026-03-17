@@ -3,7 +3,14 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-exports.sendNotification = onDocumentCreated("notifications/{id}", async (event) => {
+exports.sendNotification = onDocumentCreated(
+  {
+    document: "notifications/{id}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    console.log("🚀 FUNCTION TRIGGERED");
+
     const data = event.data?.data() || {};
 
     const title = data.title;
@@ -16,81 +23,98 @@ exports.sendNotification = onDocumentCreated("notifications/{id}", async (event)
     const withSound = data.withSound !== false;
 
     if (!title || !body) {
-      console.log("Notification skipped: missing title or body.");
+      console.log("❌ Missing title/body");
       return null;
     }
 
-    console.log("New notification:", title, body, "Audience:", audience);
+    try {
+      // ===============================
+      // 🔴 1. SEND TO SPECIFIC USER (TOKEN)
+      // ===============================
+      if (audience === "Specific User" && userId) {
+        console.log("👤 Sending to specific user:", userId);
 
-    const tokens = [];
-    const pushToken = (doc) => {
-      const token = doc.data().fcmToken;
-      if (token) tokens.push(token);
-    };
+        const userDoc = await admin.firestore().collection("users").doc(userId).get();
 
-    if (audience === "Specific User" && userId) {
-      const userDoc = await admin.firestore().collection("users").doc(userId).get();
-      if (userDoc.exists) {
-        pushToken(userDoc);
+        if (!userDoc.exists) {
+          console.log("❌ User not found");
+          return null;
+        }
+
+        const token = userDoc.data().fcmToken;
+
+        if (!token) {
+          console.log("❌ No FCM token for user");
+          return null;
+        }
+
+        const response = await admin.messaging().send({
+          token: token,
+          notification: {
+            title: title,
+            body: body,
+          },
+          data: {
+            deepLink: deepLink,
+          },
+          android: {
+            priority: highPriority ? "high" : "normal",
+            notification: withSound ? { sound: "default" } : undefined,
+          },
+          apns: {
+            headers: highPriority
+              ? { "apns-priority": "10" }
+              : { "apns-priority": "5" },
+            payload: {
+              aps: withSound ? { sound: "default" } : {},
+            },
+          },
+        });
+
+        console.log("✅ Sent to specific user:", response);
+        return null;
       }
 
-      const anonDoc = await admin.firestore().collection("anonymous_users").doc(userId).get();
-      if (anonDoc.exists) {
-        pushToken(anonDoc);
+      // ===============================
+      // 🟢 2. SEND TO ALL USERS / SEGMENT (TOPIC)
+      // ===============================
+      let topic = "allUsers";
+
+      if (audience === "User Segment" && segment) {
+        topic = `segment_${segment}`;
       }
-    } else if (audience === "User Segment" && segment) {
-      const [usersSnapshot, anonymousSnapshot] = await Promise.all([
-        admin.firestore()
-          .collection("users")
-          .where("segment", "==", segment)
-          .get(),
-        admin.firestore()
-          .collection("anonymous_users")
-          .where("segment", "==", segment)
-          .get(),
-      ]);
 
-      usersSnapshot.forEach(pushToken);
-      anonymousSnapshot.forEach(pushToken);
-    } else {
-      const [usersSnapshot, anonymousSnapshot] = await Promise.all([
-        admin.firestore().collection("users").get(),
-        admin.firestore().collection("anonymous_users").get(),
-      ]);
+      console.log("📢 Sending to topic:", topic);
 
-      usersSnapshot.forEach(pushToken);
-      anonymousSnapshot.forEach(pushToken);
-    }
-
-    if (tokens.length === 0) {
-      console.log("No tokens found for audience:", audience);
-      return null;
-    }
-
-    const message = {
-      tokens: tokens,
-      notification: {
-        title: title,
-        body: body,
-      },
-      data: {
-        deepLink: deepLink,
-      },
-      android: {
-        priority: highPriority ? "high" : "normal",
-        notification: withSound ? { sound: "default" } : undefined,
-      },
-      apns: {
-        headers: highPriority ? { "apns-priority": "10" } : { "apns-priority": "5" },
-        payload: {
-          aps: withSound ? { sound: "default" } : {},
+      const response = await admin.messaging().send({
+        topic: topic,
+        notification: {
+          title: title,
+          body: body,
         },
-      },
-    };
+        data: {
+          deepLink: deepLink,
+        },
+        android: {
+          priority: highPriority ? "high" : "normal",
+          notification: withSound ? { sound: "default" } : undefined,
+        },
+        apns: {
+          headers: highPriority
+            ? { "apns-priority": "10" }
+            : { "apns-priority": "5" },
+          payload: {
+            aps: withSound ? { sound: "default" } : {},
+          },
+        },
+      });
 
-    await admin.messaging().sendEachForMulticast(message);
+      console.log("✅ Sent to topic:", response);
 
-    console.log("Sent to", tokens.length, "users");
+    } catch (error) {
+      console.error("🔥 Error sending notification:", error);
+    }
 
     return null;
-  });
+  }
+);

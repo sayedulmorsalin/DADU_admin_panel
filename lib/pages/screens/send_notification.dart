@@ -67,17 +67,23 @@ class _SendNotificationState extends State<SendNotification> {
       _isSending = true;
     });
 
-    final Map<String, dynamic> payload = <String, dynamic>{
-      'title': _titleController.text.trim(),
-      'body': _messageController.text.trim(),
-      'audience': _selectedAudience,
-      'userId': _userIdController.text.trim(),
-      'segment': _segmentController.text.trim(),
-      'sentBy': 'admin',
-      'highPriority': _highPriority,
-      'withSound': _withSound,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+final Map<String, dynamic> payload = {
+  'title': _titleController.text.trim(),
+  'body': _messageController.text.trim(),
+  'audience': _selectedAudience,
+  'sentBy': 'admin',
+  'highPriority': _highPriority,
+  'withSound': _withSound,
+  'createdAt': FieldValue.serverTimestamp(),
+};
+
+if (_selectedAudience == 'Specific User') {
+  payload['userId'] = _userIdController.text.trim();
+}
+
+if (_selectedAudience == 'User Segment') {
+  payload['segment'] = _segmentController.text.trim();
+}
 
     try {
       await FirebaseFirestore.instance.collection('notifications').add(payload);
