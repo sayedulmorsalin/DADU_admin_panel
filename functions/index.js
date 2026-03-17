@@ -11,6 +11,8 @@ exports.sendNotification = onDocumentCreated(
   async (event) => {
     console.log("🚀 FUNCTION TRIGGERED");
 
+    const snapshot = event.data;
+    const notificationRef = snapshot?.ref;
     const data = event.data?.data() || {};
 
     const title = data.title;
@@ -21,9 +23,28 @@ exports.sendNotification = onDocumentCreated(
     const segment = data.segment || "";
     const highPriority = Boolean(data.highPriority);
     const withSound = data.withSound !== false;
+    const serverTimestamp = admin.firestore.FieldValue.serverTimestamp;
+
+    const updateNotificationStatus = async (status, extra = {}) => {
+      if (!notificationRef) {
+        return;
+      }
+
+      await notificationRef.set(
+        {
+          status,
+          ...extra,
+          processedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    };
 
     if (!title || !body) {
       console.log("❌ Missing title/body");
+      await updateNotificationStatus("failed", {
+        error: "Missing title/body",
+      });
       return null;
     }
 
@@ -38,6 +59,9 @@ exports.sendNotification = onDocumentCreated(
 
         if (!userDoc.exists) {
           console.log("❌ User not found");
+          await updateNotificationStatus("failed", {
+            error: "User not found",
+          });
           return null;
         }
 
@@ -45,6 +69,9 @@ exports.sendNotification = onDocumentCreated(
 
         if (!token) {
           console.log("❌ No FCM token for user");
+          await updateNotificationStatus("failed", {
+            error: "No FCM token for user",
+          });
           return null;
         }
 
@@ -72,6 +99,11 @@ exports.sendNotification = onDocumentCreated(
         });
 
         console.log("✅ Sent to specific user:", response);
+        await updateNotificationStatus("sent", {
+          deliveredTo: userId,
+          deliveryType: "specificUser",
+          messageId: response,
+        });
         return null;
       }
 
@@ -110,9 +142,17 @@ exports.sendNotification = onDocumentCreated(
       });
 
       console.log("✅ Sent to topic:", response);
+      await updateNotificationStatus("sent", {
+        deliveredTo: topic,
+        deliveryType: audience === "User Segment" ? "segment" : "topic",
+        messageId: response,
+      });
 
     } catch (error) {
       console.error("🔥 Error sending notification:", error);
+      await updateNotificationStatus("failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return null;

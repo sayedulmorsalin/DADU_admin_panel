@@ -67,23 +67,24 @@ class _SendNotificationState extends State<SendNotification> {
       _isSending = true;
     });
 
-final Map<String, dynamic> payload = {
-  'title': _titleController.text.trim(),
-  'body': _messageController.text.trim(),
-  'audience': _selectedAudience,
-  'sentBy': 'admin',
-  'highPriority': _highPriority,
-  'withSound': _withSound,
-  'createdAt': FieldValue.serverTimestamp(),
-};
+    final Map<String, dynamic> payload = {
+      'title': _titleController.text.trim(),
+      'body': _messageController.text.trim(),
+      'audience': _selectedAudience,
+      'sentBy': 'admin',
+      'status': 'queued',
+      'highPriority': _highPriority,
+      'withSound': _withSound,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
 
-if (_selectedAudience == 'Specific User') {
-  payload['userId'] = _userIdController.text.trim();
-}
+    if (_selectedAudience == 'Specific User') {
+      payload['userId'] = _userIdController.text.trim();
+    }
 
-if (_selectedAudience == 'User Segment') {
-  payload['segment'] = _segmentController.text.trim();
-}
+    if (_selectedAudience == 'User Segment') {
+      payload['segment'] = _segmentController.text.trim();
+    }
 
     try {
       await FirebaseFirestore.instance.collection('notifications').add(payload);
@@ -514,7 +515,7 @@ if (_selectedAudience == 'User Segment') {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Sent Notifications',
+                              'Notification History',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 12),
@@ -590,6 +591,11 @@ if (_selectedAudience == 'User Segment') {
                                     final String audience =
                                         (data['audience'] as String?)?.trim() ??
                                         'All Users';
+                                    final String status =
+                                        (data['status'] as String?)?.trim() ??
+                                        'queued';
+                                    final String? error =
+                                        (data['error'] as String?)?.trim();
                                     final Timestamp? createdAt =
                                         data['createdAt'] as Timestamp?;
 
@@ -611,6 +617,16 @@ if (_selectedAudience == 'User Segment') {
                                           const SizedBox(height: 6),
                                           Text(
                                             'Audience: $audience | ${_formatCreatedAt(createdAt)}',
+                                            style:
+                                                Theme.of(
+                                                  context,
+                                                ).textTheme.bodySmall,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            error != null && error.isNotEmpty
+                                                ? 'Status: $status | $error'
+                                                : 'Status: $status',
                                             style:
                                                 Theme.of(
                                                   context,
