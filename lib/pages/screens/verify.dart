@@ -455,7 +455,7 @@ class _VerifyState extends State<Verify> {
                                 ),
                                 onPressed: () => _acceptOrder(order, index),
                                 child: const Text(
-                                  'Accept',
+                                  'Accept the order',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.white,
