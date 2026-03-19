@@ -543,6 +543,34 @@ class DatabaseService {
     }
   }
 
+  Future<void> createNotificationForUserByEmail({
+    required String email,
+    required String title,
+    required String body,
+    String deepLink = '',
+    bool highPriority = true,
+    bool withSound = true,
+  }) async {
+    final Map<String, dynamic>? user = await getUserByEmail(email);
+
+    if (user == null || (user['id']?.toString().isEmpty ?? true)) {
+      throw Exception('User not found for notification: $email');
+    }
+
+    await _db.collection('notifications').add({
+      'title': title,
+      'body': body,
+      'audience': 'Specific User',
+      'userId': user['id'],
+      'deepLink': deepLink,
+      'sentBy': 'admin_verify',
+      'status': 'queued',
+      'highPriority': highPriority,
+      'withSound': withSound,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getBanners() async {
     try {
       QuerySnapshot querySnapshot = await _db.collection('banners').get();

@@ -192,6 +192,20 @@ class _VerifyState extends State<Verify> {
     return buffer.toString().trim();
   }
 
+  String _getNotificationOrderLabel(Map<String, dynamic> order) {
+    final dynamic explicitOrderId = order['orderId'] ?? order['order_id'];
+    if (explicitOrderId != null && explicitOrderId.toString().trim().isNotEmpty) {
+      return explicitOrderId.toString().trim();
+    }
+
+    final dynamic phone = order['phone'] ?? order['user_phone'];
+    if (phone != null && phone.toString().trim().isNotEmpty) {
+      return phone.toString().trim();
+    }
+
+    return 'your order';
+  }
+
   Future<void> _copyAllOrderInfo(Map<String, dynamic> order) async {
     final List<dynamic> items = getItems(order);
     final String summary = _buildOrderSummary(order, items);
@@ -455,7 +469,7 @@ class _VerifyState extends State<Verify> {
                                 ),
                                 onPressed: () => _acceptOrder(order, index),
                                 child: const Text(
-                                  'Accept the order',
+                                  'Accept',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.white,
@@ -492,10 +506,15 @@ class _VerifyState extends State<Verify> {
 
   Future<void> _rejectOrder(Map<String, dynamic> order, int index) async {
     try {
-      final userEmail = order['customerEmail'] ?? order['user_email'];
+      final String userEmail =
+          (order['customerEmail'] ?? order['user_email'] ?? '').toString();
+      if (userEmail.isEmpty) {
+        throw Exception('User email not found for this order');
+      }
+      final orderLabel = _getNotificationOrderLabel(order);
 
       if(true){
-        await _databaseService.removeItemsFromVerify(userEmail: userEmail!);
+        await _databaseService.removeItemsFromVerify(userEmail: userEmail);
       }
 
       if (order['freeDeliveryUsed'] == true) {
@@ -505,6 +524,12 @@ class _VerifyState extends State<Verify> {
       } else if (order['paymentProof'] != null) {
         deleteImageFromCloudinaryUrl(order['paymentProof']);
       }
+
+      await _databaseService.createNotificationForUserByEmail(
+        email: userEmail,
+        title: 'Order Rejected',
+        body: 'Your order $orderLabel was rejected. Please contact support if you need help.',
+      );
 
       setState(() {
         orders.removeAt(index);
@@ -522,9 +547,14 @@ class _VerifyState extends State<Verify> {
 
   Future<void> _acceptOrder(Map<String, dynamic> order, int index) async {
     try {
-      final userEmail = order['customerEmail'] ?? order['user_email'];
+      final String userEmail =
+          (order['customerEmail'] ?? order['user_email'] ?? '').toString();
+      if (userEmail.isEmpty) {
+        throw Exception('User email not found for this order');
+      }
+      final orderLabel = _getNotificationOrderLabel(order);
 
-      await _databaseService.moveItemsToShip(userEmail: userEmail!);
+      await _databaseService.moveItemsToShip(userEmail: userEmail);
 
       if (order['freeDeliveryUsed'] == true) {
         await _databaseService.updateUserByEmail(userEmail, {
@@ -534,6 +564,12 @@ class _VerifyState extends State<Verify> {
           'freeDeliveryUsed': false,
         });
       }
+
+      await _databaseService.createNotificationForUserByEmail(
+        email: userEmail,
+        title: 'Order Accepted',
+        body: 'Your order $orderLabel has been accepted and is now being prepared for shipping.',
+      );
 
       setState(() {
         orders.removeAt(index);
