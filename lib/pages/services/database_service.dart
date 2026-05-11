@@ -609,14 +609,22 @@ class DatabaseService {
     }
   }
 
-  Future<void> setPaymentNumber(String number) async {
+  Future<void> setPaymentNumber({
+    required String number,
+    String? bkash,
+    String? nagad,
+    String? rocket,
+  }) async {
     await FirebaseFirestore.instance
         .collection("paymentNumber")
         .doc('9O1UpVqUrdyuTqiA3YQH')
         .set(
       {
         'number': number,
-        'updatedAt': FieldValue.serverTimestamp(), // optional but recommended
+        'bkash': bkash ?? '',
+        'nagad': nagad ?? '',
+        'rocket': rocket ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
     );

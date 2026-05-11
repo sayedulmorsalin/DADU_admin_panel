@@ -16,6 +16,9 @@ class _UpdatePaymentState extends State<UpdatePayment> {
   final TextEditingController _paymentNumberController =
       TextEditingController();
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _bkashController = TextEditingController();
+  final TextEditingController _nagadController = TextEditingController();
+  final TextEditingController _rocketController = TextEditingController();
 
   List<String> _paymentEntries = <String>[];
   String? _selectedEntry;
@@ -44,13 +47,17 @@ class _UpdatePaymentState extends State<UpdatePayment> {
   Future<void> _addPaymentNumber() async {
     final String number = _paymentNumberController.text.trim();
     final String name = _nameController.text.trim();
+    final String bkash = _bkashController.text.trim();
+    final String nagad = _nagadController.text.trim();
+    final String rocket = _rocketController.text.trim();
+
     if (number.isEmpty || name.isEmpty) {
       return;
     }
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final List<String> updated = List<String>.from(_paymentEntries);
-    final String entry = '$name|$number';
+    final String entry = '$name|$number|$bkash|$nagad|$rocket';
     if (!updated.contains(entry)) {
       updated.add(entry);
       await prefs.setStringList(_prefsKeyNumbers, updated);
@@ -67,6 +74,9 @@ class _UpdatePaymentState extends State<UpdatePayment> {
 
     _paymentNumberController.clear();
     _nameController.clear();
+    _bkashController.clear();
+    _nagadController.clear();
+    _rocketController.clear();
   }
 
   Future<void> _resetAll() async {
@@ -97,10 +107,37 @@ class _UpdatePaymentState extends State<UpdatePayment> {
     return entry;
   }
 
+  String _entryBkash(String entry) {
+    final List<String> parts = entry.split('|');
+    if (parts.length >= 3) {
+      return parts[2];
+    }
+    return '';
+  }
+
+  String _entryNagad(String entry) {
+    final List<String> parts = entry.split('|');
+    if (parts.length >= 4) {
+      return parts[3];
+    }
+    return '';
+  }
+
+  String _entryRocket(String entry) {
+    final List<String> parts = entry.split('|');
+    if (parts.length >= 5) {
+      return parts[4];
+    }
+    return '';
+  }
+
   @override
   void dispose() {
     _paymentNumberController.dispose();
     _nameController.dispose();
+    _bkashController.dispose();
+    _nagadController.dispose();
+    _rocketController.dispose();
     super.dispose();
   }
 
@@ -188,6 +225,58 @@ class _UpdatePaymentState extends State<UpdatePayment> {
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _bkashController,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                labelText: 'Bkash',
+                                prefixIcon: const Icon(Icons.payment),
+                                filled: true,
+                                fillColor:
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _nagadController,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                labelText: 'Nagad',
+                                prefixIcon: const Icon(Icons.payment),
+                                filled: true,
+                                fillColor:
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _rocketController,
+                              keyboardType: TextInputType.phone,
+                              decoration: InputDecoration(
+                                labelText: 'Rocket',
+                                prefixIcon: const Icon(Icons.payment),
+                                filled: true,
+                                fillColor:
+                                    Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+
                             const SizedBox(height: 16),
                             Row(
                               children: [
@@ -247,13 +336,19 @@ class _UpdatePaymentState extends State<UpdatePayment> {
                             });
                             try {
                               final String entry = value ?? '';
-                              dbService.setPaymentNumber(_entryNumber(entry));
+                              dbService.setPaymentNumber(
+                                number: _entryNumber(entry),
+                                bkash: _entryBkash(entry),
+                                nagad: _entryNagad(entry),
+                                rocket: _entryRocket(entry),
+                              );
                             } on Exception catch (e) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Error: $e')),
                               );
                             }
                           },
+
                           decoration: InputDecoration(
                             labelText: 'Select Name',
                             prefixIcon: const Icon(Icons.list_alt_outlined),

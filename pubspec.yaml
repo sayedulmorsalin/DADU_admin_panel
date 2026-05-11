@@ -44,6 +44,7 @@ dependencies:
   clipboard: ^2.0.2
   flutter_dotenv: ^6.0.0
   shared_preferences: ^2.5.4
+  fuzzy: ^0.5.1
 
 
 dev_dependencies:

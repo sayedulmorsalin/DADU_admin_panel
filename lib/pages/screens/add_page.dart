@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../widgets/product_card.dart';
+import 'package:fuzzy/fuzzy.dart';
+
 
 class AddPage extends StatefulWidget {
   @override
@@ -15,6 +17,9 @@ class _AddPageState extends State<AddPage> {
   final DatabaseService _dbService = DatabaseService();
   final ImageUploadService _imageService = ImageUploadService();
   List<Map<String, dynamic>> products = [];
+  List<Map<String, dynamic>> filteredProducts = [];
+  final TextEditingController _searchController = TextEditingController();
+
   final List<String> brands = [
     'Adidas',
     'Nike',
@@ -58,17 +63,65 @@ class _AddPageState extends State<AddPage> {
     _editPriceController = TextEditingController();
     _editDetailsController = TextEditingController();
     _editVideoController = TextEditingController();
+    _searchController.addListener(_onSearchChanged);
     _editSelectedBrand = 'Adidas';
   }
+
+  void _onSearchChanged() {
+    _searchProducts(_searchController.text);
+  }
+
+  void _searchProducts(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        filteredProducts = products;
+      });
+      return;
+    }
+
+    final fuzzy = Fuzzy<Map<String, dynamic>>(
+      products,
+      options: FuzzyOptions(
+        keys: [
+          WeightedKey(
+            name: 'name',
+            getter: (p) => p['name'] ?? '',
+            weight: 1.0,
+          ),
+          WeightedKey(
+            name: 'brand',
+            getter: (p) => p['brand'] ?? '',
+            weight: 0.7,
+          ),
+          WeightedKey(
+            name: 'details',
+            getter: (p) => p['details'] ?? '',
+            weight: 0.5,
+          ),
+        ],
+        threshold: 0.3,
+      ),
+    );
+
+    final result = fuzzy.search(query);
+    setState(() {
+      filteredProducts = result.map((r) => r.item).toList();
+    });
+  }
+
 
   Future<void> _loadProducts() async {
     try {
       final loadedProducts = await _dbService.getProducts();
-      setState(() => products = loadedProducts);
+      setState(() {
+        products = loadedProducts;
+        filteredProducts = loadedProducts;
+      });
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
     }
   }
+
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(
@@ -76,8 +129,8 @@ class _AddPageState extends State<AddPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showEditDialog(int index) {
-    _editingProduct = products[index];
+  void _showEditDialog(Map<String, dynamic> product) {
+    _editingProduct = product;
     _editNameController.text = _editingProduct!['name'];
     _editPriceController.text = _editingProduct!['price'];
     _editDetailsController.text = _editingProduct!['details'];
@@ -85,10 +138,11 @@ class _AddPageState extends State<AddPage> {
     _editSelectedBrand = _editingProduct!['brand'] ?? 'Others';
     _editErrorMessage = null;
 
-    showDialog(context: context, builder: (context) => _buildEditDialog(index));
+    showDialog(context: context, builder: (context) => _buildEditDialog());
   }
 
-  Widget _buildEditDialog(int index) {
+  Widget _buildEditDialog() {
+
     return AlertDialog(
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -171,14 +225,15 @@ class _AddPageState extends State<AddPage> {
           child: const Text("Cancel"),
         ),
         ElevatedButton(
-          onPressed: () => _saveEditedProduct(index),
+          onPressed: () => _saveEditedProduct(),
           child: const Text("Save"),
         ),
       ],
     );
   }
 
-  void _saveEditedProduct(int index) async {
+
+  void _saveEditedProduct() async {
     if (_editNameController.text.isEmpty || _editPriceController.text.isEmpty) {
       setState(() {
         _editErrorMessage = "Name and price are required";
@@ -187,10 +242,11 @@ class _AddPageState extends State<AddPage> {
     }
 
     try {
-      final oldName = products[index]['name'];
+      final oldName = _editingProduct!['name'];
+      final productId = _editingProduct!['id'];
 
       final updatedProduct = {
-        ...products[index],
+        ..._editingProduct!,
         "name": _editNameController.text,
         "price": _editPriceController.text,
         "details": _editDetailsController.text,
@@ -199,7 +255,7 @@ class _AddPageState extends State<AddPage> {
         "updatedAt": FieldValue.serverTimestamp(),
       };
 
-      await _dbService.updateProduct(updatedProduct['id'], {
+      await _dbService.updateProduct(productId, {
         'name': updatedProduct['name'],
         'price': updatedProduct['price'],
         'details': updatedProduct['details'],
@@ -212,7 +268,13 @@ class _AddPageState extends State<AddPage> {
         await _dbService.updateProductName(oldName, updatedProduct['name']);
       }
 
-      setState(() => products[index] = updatedProduct);
+      setState(() {
+        final index = products.indexWhere((p) => p['id'] == productId);
+        if (index != -1) {
+          products[index] = updatedProduct;
+        }
+        _searchProducts(_searchController.text);
+      });
       Navigator.pop(context);
     } catch (e) {
       setState(() {
@@ -221,8 +283,10 @@ class _AddPageState extends State<AddPage> {
     }
   }
 
-  void _deleteProduct(int index) {
-    final productName = products[index]['name'];
+
+  void _deleteProduct(Map<String, dynamic> product) {
+    final productName = product['name'];
+    final productId = product['id'];
 
     showDialog(
       context: context,
@@ -241,23 +305,27 @@ class _AddPageState extends State<AddPage> {
                 onPressed: () async {
                   try {
                     final imageService = ImageUploadService();
-                    String img5 = products[index]['image5'];
-                    String img20 = products[index]['image20'];
+                    String img5 = product['image5'];
+                    String img20 = product['image20'];
 
                     await imageService.deleteImage(img5);
                     await imageService.deleteImage(img20);
 
-                    await _dbService.deleteProduct(products[index]['id']);
+                    await _dbService.deleteProduct(productId);
 
                     await _dbService.removeProductName(productName);
 
-                    setState(() => products.removeAt(index));
+                    setState(() {
+                      products.removeWhere((p) => p['id'] == productId);
+                      _searchProducts(_searchController.text);
+                    });
 
                     Navigator.pop(context);
                   } catch (e) {
                     _showSnackBar("Deletion failed: ${e.toString()}");
                   }
                 },
+
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 child: const Text("Delete"),
               ),
@@ -448,10 +516,12 @@ class _AddPageState extends State<AddPage> {
 
       await _dbService.addProductName(newProduct['name'] ?? "no name");
 
-      setState(
-        () =>
-            products.insert(0, {...newProduct, 'id': docRef.id, 'clicked': 0}),
-      );
+      setState(() {
+        final product = {...newProduct, 'id': docRef.id, 'clicked': 0};
+        products.insert(0, product);
+        _searchProducts(_searchController.text);
+      });
+
       Navigator.pop(context);
     } catch (e) {
       setState(() {
@@ -471,23 +541,47 @@ class _AddPageState extends State<AddPage> {
         onPressed: _showAddProductSheet,
         child: const Icon(Icons.add),
       ),
-      body:
-          products.isEmpty
-              ? const Center(child: Text("No products found"))
-              : Padding(
-                padding: const EdgeInsets.all(16),
-                child: ListView.builder(
-                  itemCount: products.length,
-                  itemBuilder:
-                      (context, index) => ProductCard(
-                        product: products[index],
-                        onEdit: () => _showEditDialog(index),
-                        onDelete: () => _deleteProduct(index),
-                      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16.0, 40.0, 16.0, 16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: "Search products...",
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                filled: true,
+                fillColor: Colors.grey[100],
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-    );
-  }
+            ),
+          ),
+          Expanded(
+            child:
+                filteredProducts.isEmpty
+                    ? const Center(child: Text("No products found"))
+                    : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ListView.builder(
+                        itemCount: filteredProducts.length,
+                        itemBuilder:
+                            (context, index) => ProductCard(
+                              product: filteredProducts[index],
+                              onEdit: () => _showEditDialog(filteredProducts[index]),
+                              onDelete: () => _deleteProduct(filteredProducts[index]),
+                            ),
+                      ),
+                    ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   @override
   void dispose() {
@@ -499,6 +593,8 @@ class _AddPageState extends State<AddPage> {
     _editPriceController.dispose();
     _editDetailsController.dispose();
     _editVideoController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
+
 }
