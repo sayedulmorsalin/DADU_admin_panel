@@ -571,6 +571,26 @@ class DatabaseService {
     });
   }
 
+  Future<void> sendPushNotification({
+    required String email,
+    required String title,
+    required String body,
+  }) async {
+    final Map<String, dynamic>? user = await getUserByEmail(email);
+
+    if (user == null || (user['id']?.toString().isEmpty ?? true)) {
+      throw Exception('User not found for notification: $email');
+    }
+
+    await _db.collection('order_push_notifications').add({
+      'title': title,
+      'body': body,
+      'userId': user['id'],
+      'email': email,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getBanners() async {
     try {
       QuerySnapshot querySnapshot = await _db.collection('banners').get();

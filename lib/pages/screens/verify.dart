@@ -525,7 +525,7 @@ class _VerifyState extends State<Verify> {
         deleteImageFromCloudinaryUrl(order['paymentProof']);
       }
 
-      await _databaseService.createNotificationForUserByEmail(
+      await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Rejected',
         body: 'Your order $orderLabel was rejected. Please contact support if you need help.',
@@ -565,7 +565,7 @@ class _VerifyState extends State<Verify> {
         });
       }
 
-      await _databaseService.createNotificationForUserByEmail(
+      await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Accepted',
         body: 'Your order $orderLabel has been accepted and is now being prepared for shipping.',

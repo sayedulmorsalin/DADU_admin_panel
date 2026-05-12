@@ -158,3 +158,80 @@ exports.sendNotification = onDocumentCreated(
     return null;
   }
 );
+
+exports.sendOrderPushNotification = onDocumentCreated(
+  {
+    document: "order_push_notifications/{id}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    console.log("🚀 ORDER PUSH NOTIFICATION TRIGGERED");
+
+    const snapshot = event.data;
+    if (!snapshot) return null;
+
+    const notificationRef = snapshot.ref;
+    const data = snapshot.data();
+
+    const { title, body, userId } = data;
+
+    if (!title || !body || !userId) {
+      console.log("❌ Missing title, body, or userId");
+      await notificationRef.delete();
+      return null;
+    }
+
+    try {
+      console.log("👤 Fetching user:", userId);
+      const userDoc = await admin.firestore().collection("users").doc(userId).get();
+
+      if (!userDoc.exists) {
+        console.log("❌ User not found");
+        await notificationRef.delete();
+        return null;
+      }
+
+      const token = userDoc.data().fcmToken;
+
+      if (!token) {
+        console.log("❌ No FCM token for user");
+        await notificationRef.delete();
+        return null;
+      }
+
+      const response = await admin.messaging().send({
+        token: token,
+        notification: {
+          title: title,
+          body: body,
+        },
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+          },
+        },
+        apns: {
+          headers: {
+            "apns-priority": "10",
+          },
+          payload: {
+            aps: {
+              sound: "default",
+            },
+          },
+        },
+      });
+
+      console.log("✅ Sent to specific user:", response);
+    } catch (error) {
+      console.error("🔥 Error sending notification:", error);
+    } finally {
+      // Always delete the document after attempt (as per user request)
+      console.log("🗑️ Deleting notification document");
+      await notificationRef.delete();
+    }
+
+    return null;
+  }
+);
