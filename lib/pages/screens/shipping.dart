@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/database_service.dart';
 import '../services/image_delete_service.dart';
@@ -34,31 +35,49 @@ class _ShippingState extends State<Shipping> {
   }
 
   Future<void> fetchOrders() async {
-    final data = await _databaseService.getAllShipped();
+    try {
+      final data = await _databaseService.getAllShipped();
 
-    // Safe sorting with null checks
-    data.sort((a, b) {
-      try {
-        final dateA = a['timestamp']?.toDate() ?? a['order_date'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(a['order_date'])
-            : DateTime(0);
-        final dateB = b['timestamp']?.toDate() ?? b['order_date'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(b['order_date'])
-            : DateTime(0);
+      data.sort((a, b) {
+        final dateA = _readOrderDate(a);
+        final dateB = _readOrderDate(b);
         return dateB.compareTo(dateA);
-      } catch (e) {
-        return 0;
-      }
-    });
+      });
 
-    setState(() {
-      orders = data;
-      for (var order in data) {
-        final orderId = order['order_id'] as String? ?? '';
-        _pointControllers.putIfAbsent(orderId, () => TextEditingController());
+      if (!mounted) return;
+      setState(() {
+        orders = data;
+        for (var order in data) {
+          final orderId = order['order_id']?.toString() ?? '';
+          _pointControllers.putIfAbsent(orderId, () => TextEditingController());
+        }
+        isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text("Failed to load orders: $e")),
+      );
+    }
+  }
+
+  DateTime _readOrderDate(Map<String, dynamic> order) {
+    final value = order['timestamp'] ?? order['created_at'] ?? order['order_date'];
+    try {
+      if (value == null) return DateTime(0);
+      if (value is Timestamp) return value.toDate();
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+        final millis = int.tryParse(value);
+        if (millis != null) return DateTime.fromMillisecondsSinceEpoch(millis);
       }
-      isLoading = false;
-    });
+    } catch (_) {}
+    return DateTime(0);
   }
 
   // Safe method to get items list
@@ -70,6 +89,15 @@ class _ShippingState extends State<Shipping> {
     } catch (e) {
       return [];
     }
+  }
+
+  num _safeNum(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value;
+    if (value is String) {
+      return num.tryParse(value) ?? 0;
+    }
+    return 0;
   }
 
   // Safe text display method
@@ -115,9 +143,9 @@ class _ShippingState extends State<Shipping> {
           itemCount: orders.length,
           itemBuilder: (context, index) {
             final order = orders[index];
-            final orderId = order['order_id'] as String? ?? '';
+            final orderId = order['order_id']?.toString() ?? '';
             final items = getItems(order);
-            final userEmail = order['customerEmail'] ?? order['user_email'];
+            final userEmail = (order['customerEmail'] ?? order['user_email'])?.toString() ?? '';
 
             return Card(
               margin: const EdgeInsets.all(10),
@@ -152,9 +180,9 @@ class _ShippingState extends State<Shipping> {
                     if (items.isNotEmpty) ...items.map((item) {
                       final itemMap = item is Map<String, dynamic> ? item : {};
                       return ListTile(
-                        leading: itemMap['imageUrl'] != null
+                        leading: itemMap['imageUrl']?.toString().trim().isNotEmpty == true
                             ? Image.network(
-                          itemMap['imageUrl']!,
+                          itemMap['imageUrl'].toString(),
                           width: 50,
                           height: 50,
                           errorBuilder: (context, error, stackTrace) =>
@@ -194,7 +222,7 @@ class _ShippingState extends State<Shipping> {
                     buildSafeText("Payment Method", order['paymentMethod']),
                     buildSafeText("Point in account", order['deliveryPoints']),
                     buildSafeText("Point in use",
-                        (order['baseDeliveryCharge'] ?? 0) - (order['deliveryCharge'] ?? 0),
+                        _safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
                     buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
@@ -258,9 +286,9 @@ class _ShippingState extends State<Shipping> {
     );
   }
 
-  Future<void> _cancelOrder(Map<String, dynamic> order, int index, String? userEmail) async {
+  Future<void> _cancelOrder(Map<String, dynamic> order, int index, String userEmail) async {
     try {
-      if (userEmail == null) throw Exception("User email not found");
+      if (userEmail.isEmpty) throw Exception("User email not found");
 
       // Remove order from to_ship array
       await _databaseService.removeItemsFromShip(
@@ -269,12 +297,12 @@ class _ShippingState extends State<Shipping> {
 
       // Delete payment proof if not free delivery
       if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof']);
+        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
 
       // Update UI
       setState(() {
-        final orderId = order['order_id'] as String? ?? '';
+        final orderId = order['order_id']?.toString() ?? '';
         _pointControllers.remove(orderId);
         orders.removeAt(index);
       });
@@ -289,9 +317,9 @@ class _ShippingState extends State<Shipping> {
     }
   }
 
-  Future<void> _deliverOrder(Map<String, dynamic> order, int index, String? userEmail) async {
+  Future<void> _deliverOrder(Map<String, dynamic> order, int index, String userEmail) async {
     try {
-      if (userEmail == null) throw Exception("User email not found");
+      if (userEmail.isEmpty) throw Exception("User email not found");
 
       // Move order to completed
       await _databaseService.moveItemsToCompleted(
@@ -300,13 +328,13 @@ class _ShippingState extends State<Shipping> {
 
       // Delete payment proof if not free delivery
       if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof']);
+        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
 
       // Calculate and update points
       int points = 10;
-      int currentPoints = order['deliveryPoints'] ?? 0;
-      int baseCharge = order['baseDeliveryCharge'] ?? 0;
+      num currentPoints = _safeNum(order['deliveryPoints']);
+      num baseCharge = _safeNum(order['baseDeliveryCharge']);
 
       if (order['freeDeliveryUsed'] == true) {
         await _databaseService.updateUserByEmail(
@@ -326,7 +354,7 @@ class _ShippingState extends State<Shipping> {
 
       // Update UI
       setState(() {
-        final orderId = order['order_id'] as String? ?? '';
+        final orderId = order['order_id']?.toString() ?? '';
         _pointControllers.remove(orderId);
         orders.removeAt(index);
       });

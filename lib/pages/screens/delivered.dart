@@ -89,6 +89,15 @@ class _DeliveredState extends State<Delivered> {
     }
   }
 
+  num _safeNum(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value;
+    if (value is String) {
+      return num.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+
   // Safe text display method
   Widget buildSafeText(String label, dynamic value, {TextStyle? style}) {
     return Text(
@@ -208,7 +217,7 @@ class _DeliveredState extends State<Delivered> {
                   buildSafeText("Payment Method", order['paymentMethod']),
                   buildSafeText("Point in account", order['deliveryPoints']),
                   buildSafeText("Point in use",
-                      (order['baseDeliveryCharge'] ?? 0) - (order['deliveryCharge'] ?? 0),
+                      _safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
                   buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),

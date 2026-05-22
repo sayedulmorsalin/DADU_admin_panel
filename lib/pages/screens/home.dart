@@ -9,6 +9,7 @@ import 'package:dadu_admin_panel/pages/screens/send_notification.dart';
 import 'package:dadu_admin_panel/pages/screens/shipping.dart';
 import 'package:dadu_admin_panel/pages/screens/update_payment.dart';
 import 'package:dadu_admin_panel/pages/screens/verify.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/database_service.dart';
@@ -17,6 +18,20 @@ import 'new_arrival.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      // Navigation is handled by StreamBuilder in main.dart
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error logging out: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +47,37 @@ class AdminDashboard extends StatelessWidget {
         ),
         centerTitle: true,
         backgroundColor: Colors.blue[800],
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'logout') {
+                    await _logout(context);
+                  }
+                },
+                itemBuilder:
+                    (BuildContext context) => [
+                      const PopupMenuItem<String>(
+                        value: 'logout',
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Logout'),
+                          ],
+                        ),
+                      ),
+                    ],
+                child: const CircleAvatar(
+                  backgroundColor: Colors.yellow,
+                  child: Icon(Icons.person, color: Colors.blue),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: const AdminHome(),
     );
@@ -69,7 +115,8 @@ class _AdminHomeState extends State<AdminHome> {
     adAnalyticsStream = _dbService.getAdAnalyticsStream();
 
     final now = DateTime.now();
-    final currentMonthKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+    final currentMonthKey =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}";
     final prevMonth = DateTime(now.year, now.month - 1, 1);
     final prevMonthKey =
         "${prevMonth.year}-${prevMonth.month.toString().padLeft(2, '0')}";
@@ -98,16 +145,19 @@ class _AdminHomeState extends State<AdminHome> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("Select Month: ",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                "Select Month: ",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               DropdownButton<String>(
                 value: _selectedMonthKey,
-                items: _monthKeys.map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
+                items:
+                    _monthKeys.map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
                 onChanged: (String? newValue) {
                   setState(() {
                     _selectedMonthKey = newValue!;
@@ -124,7 +174,8 @@ class _AdminHomeState extends State<AdminHome> {
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Expanded(
-                        child: Center(child: CircularProgressIndicator()));
+                      child: Center(child: CircularProgressIndicator()),
+                    );
                   }
                   final adData = snapshot.data ?? {};
                   final monthlyRewardAdCount = adData[_selectedMonthKey] ?? 0;
@@ -323,16 +374,17 @@ class _AdminHomeState extends State<AdminHome> {
               border: Border.all(color: Colors.blue, width: 3),
             ),
             child: Center(
-              child: isLoading
-                  ? const CircularProgressIndicator(color: Colors.blue)
-                  : Text(
-                      count.toString(),
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+              child:
+                  isLoading
+                      ? const CircularProgressIndicator(color: Colors.blue)
+                      : Text(
+                        count.toString(),
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
                       ),
-                    ),
             ),
           ),
         ],
@@ -374,13 +426,13 @@ class _AdminHomeState extends State<AdminHome> {
             isLoading
                 ? const CircularProgressIndicator()
                 : Text(
-                    count.toString(),
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: color,
                   ),
+                ),
           ],
         ),
       ),
@@ -490,11 +542,12 @@ class _AdminHomeState extends State<AdminHome> {
                     final email = data['email'] ?? 'Anonymous User';
                     final timestamp = data['lastLogin'] as Timestamp?;
 
-                    final time = timestamp != null
-                        ? DateFormat(
-                            'MMM dd, hh:mm a',
-                          ).format(timestamp.toDate())
-                        : 'Unknown';
+                    final time =
+                        timestamp != null
+                            ? DateFormat(
+                              'MMM dd, hh:mm a',
+                            ).format(timestamp.toDate())
+                            : 'Unknown';
 
                     return ListTile(
                       leading: CircleAvatar(

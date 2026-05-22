@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:clipboard/clipboard.dart';
@@ -27,33 +28,39 @@ class _VerifyState extends State<Verify> {
       final data = await _databaseService.getAllOrdersVerify();
 
       data.sort((a, b) {
-        try {
-          final dateA =
-              a['timestamp']?.toDate() ??
-              (a['order_date'] != null
-                  ? DateTime.fromMillisecondsSinceEpoch(a['order_date'])
-                  : DateTime(0));
-          final dateB =
-              b['timestamp']?.toDate() ??
-              (b['order_date'] != null
-                  ? DateTime.fromMillisecondsSinceEpoch(b['order_date'])
-                  : DateTime(0));
-          return dateB.compareTo(dateA);
-        } catch (e) {
-          return 0;
-        }
+        final dateA = _readOrderDate(a);
+        final dateB = _readOrderDate(b);
+        return dateB.compareTo(dateA);
       });
 
+      if (!mounted) return;
       setState(() {
         orders = data;
         isLoading = false;
       });
     } catch (e) {
       print("Error fetching orders: $e");
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });
     }
+  }
+
+  DateTime _readOrderDate(Map<String, dynamic> order) {
+    final value = order['timestamp'] ?? order['created_at'] ?? order['order_date'];
+    try {
+      if (value == null) return DateTime(0);
+      if (value is Timestamp) return value.toDate();
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+        final millis = int.tryParse(value);
+        if (millis != null) return DateTime.fromMillisecondsSinceEpoch(millis);
+      }
+    } catch (_) {}
+    return DateTime(0);
   }
 
   List<dynamic> getItems(Map<String, dynamic> order) {
@@ -64,6 +71,15 @@ class _VerifyState extends State<Verify> {
     } catch (e) {
       return [];
     }
+  }
+
+  num _safeNum(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value;
+    if (value is String) {
+      return num.tryParse(value) ?? 0;
+    }
+    return 0;
   }
 
   Widget buildSafeText(String label, dynamic value, {TextStyle? style}) {
@@ -117,15 +133,16 @@ class _VerifyState extends State<Verify> {
     }
   }
 
-  Widget buildCopyableRow(String label, String value) {
+  Widget buildCopyableRow(String label, dynamic value) {
+    final text = value?.toString() ?? 'N/A';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: buildSafeText(label, value)),
-        if (value.isNotEmpty && value != 'N/A')
+        Expanded(child: buildSafeText(label, text)),
+        if (text.isNotEmpty && text != 'N/A')
           IconButton(
             icon: const Icon(Icons.content_copy, size: 18),
-            onPressed: () => _copyToClipboard(label, value),
+            onPressed: () => _copyToClipboard(label, text),
             tooltip: 'Copy',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -168,7 +185,7 @@ class _VerifyState extends State<Verify> {
       'Point in account: ${_formatValue(order['deliveryPoints'])}',
     );
     buffer.writeln(
-      'Point in use: ${_formatValue((order['baseDeliveryCharge'] ?? 0) - (order['deliveryCharge'] ?? 0))}',
+      'Point in use: ${_formatValue(_safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']))}',
     );
     buffer.writeln(
       'Request for free delivery: ${_formatValue(order['freeDeliveryUsed'])}',
@@ -249,10 +266,14 @@ class _VerifyState extends State<Verify> {
                   final order = orders[index];
                   final items = getItems(order);
                   final email =
-                      order['customerEmail'] ?? order['user_email'] ?? '';
+                      (order['customerEmail'] ?? order['user_email'] ?? '')
+                          .toString();
                   final customerName =
-                      order['customerName'] ?? order['user_name'] ?? 'N/A';
-                  final phone = order['phone'] ?? order['user_phone'] ?? 'N/A';
+                      (order['customerName'] ?? order['user_name'] ?? 'N/A')
+                          .toString();
+                  final phone =
+                      (order['phone'] ?? order['user_phone'] ?? 'N/A')
+                          .toString();
 
                   return Card(
                     margin: const EdgeInsets.all(10),
@@ -323,9 +344,9 @@ class _VerifyState extends State<Verify> {
                                   item is Map<String, dynamic> ? item : {};
                               return ListTile(
                                 leading:
-                                    itemMap['imageUrl'] != null
+                                    itemMap['imageUrl']?.toString().trim().isNotEmpty == true
                                         ? Image.network(
-                                          itemMap['imageUrl']!,
+                                          itemMap['imageUrl'].toString(),
                                           width: 50,
                                           height: 50,
                                           errorBuilder:
@@ -388,8 +409,8 @@ class _VerifyState extends State<Verify> {
                           ),
                           buildSafeText(
                             "Point in use",
-                            (order['baseDeliveryCharge'] ?? 0) -
-                                (order['deliveryCharge'] ?? 0),
+                            _safeNum(order['baseDeliveryCharge']) -
+                                _safeNum(order['deliveryCharge']),
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
@@ -518,11 +539,11 @@ class _VerifyState extends State<Verify> {
       }
 
       if (order['freeDeliveryUsed'] == true) {
-        await _databaseService.updateUserByEmail(userEmail!, {
+        await _databaseService.updateUserByEmail(userEmail, {
           'freeDeliveryUsed': false,
         });
       } else if (order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof']);
+        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
 
       await _databaseService.sendPushNotification(
@@ -559,8 +580,8 @@ class _VerifyState extends State<Verify> {
       if (order['freeDeliveryUsed'] == true) {
         await _databaseService.updateUserByEmail(userEmail, {
           'free_delivery_info':
-              (order['deliveryPoints'] ?? 0) -
-              (order['baseDeliveryCharge'] ?? 0),
+              _safeNum(order['deliveryPoints']) -
+              _safeNum(order['baseDeliveryCharge']),
           'freeDeliveryUsed': false,
         });
       }
