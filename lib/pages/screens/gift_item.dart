@@ -21,6 +21,13 @@ class _GiftItemState extends State<GiftItem> {
   Future<void> _loadProducts() async {
     try {
       final loadedProducts = await _dbService.getProducts();
+      // Place products already marked as freeGift first
+      loadedProducts.sort((a, b) {
+        final ai = (a['freeGift'] == true) ? 1 : 0;
+        final bi = (b['freeGift'] == true) ? 1 : 0;
+        return bi - ai; // bi before ai => gifted (1) come first
+      });
+
       setState(() => products = loadedProducts);
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
@@ -31,6 +38,55 @@ class _GiftItemState extends State<GiftItem> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _setGiftStatus(
+    Map<String, dynamic> product,
+    bool isGifted,
+  ) async {
+    final String productId = product["id"];
+
+    try {
+      await _dbService.updateProduct(productId, {"freeGift": isGifted});
+
+      _showSnackBar(
+        isGifted
+            ? "Added to gift item successfully!"
+            : "Removed from gift item successfully!",
+      );
+      await _loadProducts();
+    } catch (e) {
+      _showSnackBar("Update failed: $e");
+    }
+  }
+
+  void _confirmGiftAction(Map<String, dynamic> product) {
+    final bool isGifted = product["freeGift"] == true;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            isGifted
+                ? "Remove this product from gift item?"
+                : "Are you sure you want to gift this product?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _setGiftStatus(product, !isGifted);
+              },
+              child: Text(isGifted ? "Remove" : "Gift"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void showTextDateTimeDialog(Map<String, dynamic> product) {
@@ -49,19 +105,8 @@ class _GiftItemState extends State<GiftItem> {
 
                 ElevatedButton(
                   onPressed: () async {
-                    final String productId = product["id"];
-
-                    try {
-                      await _dbService.updateProduct(productId, {
-                        "freeGift": true,
-                      });
-
-                      _showSnackBar("Gift updated successfully!");
-                      _loadProducts();
-                      Navigator.pop(context);
-                    } catch (e) {
-                      _showSnackBar("Update failed: $e");
-                    }
+                    Navigator.pop(context);
+                    await _setGiftStatus(product, true);
                   },
                   child: Text("Gift"),
                 ),
@@ -150,8 +195,12 @@ class _GiftItemState extends State<GiftItem> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         ElevatedButton(
-                          onPressed: () => showTextDateTimeDialog(product),
-                          child: Text("Gift"),
+                          onPressed: () => _confirmGiftAction(product),
+                          child: Text(
+                            product["freeGift"] == true
+                                ? "Remove from Gift Item"
+                                : "Gift",
+                          ),
                         ),
                       ],
                     ),

@@ -16,15 +16,13 @@ class _FlashSellState extends State<FlashSell> {
   DatabaseService _dbService = DatabaseService();
   List<Map<String, dynamic>> products = [];
 
-
   String formatRemainingTime(dynamic value) {
     if (value == null) return "No flash";
 
     DateTime endTime;
     if (value is Timestamp) {
       endTime = value.toDate();
-    }
-    else if (value is String) {
+    } else if (value is String) {
       endTime = DateTime.parse(value);
     } else {
       return "Invalid date";
@@ -40,18 +38,15 @@ class _FlashSellState extends State<FlashSell> {
     return "${two(diff.inHours)}:${two(diff.inMinutes % 60)}:${two(diff.inSeconds % 60)}";
   }
 
-
   @override
   void initState() {
     super.initState();
     _loadProducts();
 
-
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {});
     });
   }
-
 
   @override
   void dispose() {
@@ -61,13 +56,16 @@ class _FlashSellState extends State<FlashSell> {
     super.dispose();
   }
 
-
   Future<void> _loadProducts() async {
     try {
       final loadedProducts = await _dbService.getProducts();
       loadedProducts.sort((a, b) {
-        final isAFlash = a['flashSell'] == true && formatRemainingTime(a['flash-expire']) != "Expired";
-        final isBFlash = b['flashSell'] == true && formatRemainingTime(b['flash-expire']) != "Expired";
+        final isAFlash =
+            a['flashSell'] == true &&
+            formatRemainingTime(a['flash-expire']) != "Expired";
+        final isBFlash =
+            b['flashSell'] == true &&
+            formatRemainingTime(b['flash-expire']) != "Expired";
 
         if (isAFlash && !isBFlash) return -1;
         if (!isAFlash && isBFlash) return 1;
@@ -80,13 +78,69 @@ class _FlashSellState extends State<FlashSell> {
     }
   }
 
-
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _setFlashStatus(
+    Map<String, dynamic> product,
+    bool isFlash,
+  ) async {
+    final String productId = product["id"];
+
+    try {
+      if (isFlash) {
+        // remove flash fields
+        await _dbService.updateProduct(productId, {
+          "flashSell": false,
+          "flash-expire": FieldValue.delete(),
+        });
+      } else {
+        // not used here, creation is handled by showTextDateTimeDialog
+        await _dbService.updateProduct(productId, {"flashSell": true});
+      }
+
+      _showSnackBar(
+        isFlash
+            ? "Removed from flash sell successfully!"
+            : "Added to flash sell successfully!",
+      );
+      await _loadProducts();
+    } catch (e) {
+      _showSnackBar("Update failed: $e");
+    }
+  }
+
+  void _confirmFlashAction(Map<String, dynamic> product) {
+    final bool isFlash = product["flashSell"] == true;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            isFlash
+                ? "Remove this product from flash sell?"
+                : "Make this product flash sell?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _setFlashStatus(product, isFlash);
+              },
+              child: Text(isFlash ? "Remove" : "Flash"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void showTextDateTimeDialog(Map<String, dynamic> product) {
     final TextEditingController textController = TextEditingController();
@@ -124,9 +178,11 @@ class _FlashSellState extends State<FlashSell> {
                         setState(() => selectedDate = pickedDate);
                       }
                     },
-                    child: Text(selectedDate == null
-                        ? "Pick Date"
-                        : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}"),
+                    child: Text(
+                      selectedDate == null
+                          ? "Pick Date"
+                          : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
+                    ),
                   ),
 
                   SizedBox(height: 12),
@@ -141,9 +197,11 @@ class _FlashSellState extends State<FlashSell> {
                         setState(() => selectedTime = pickedTime);
                       }
                     },
-                    child: Text(selectedTime == null
-                        ? "Pick Time"
-                        : selectedTime!.format(context)),
+                    child: Text(
+                      selectedTime == null
+                          ? "Pick Time"
+                          : selectedTime!.format(context),
+                    ),
                   ),
                 ],
               ),
@@ -196,7 +254,6 @@ class _FlashSellState extends State<FlashSell> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -240,8 +297,9 @@ class _FlashSellState extends State<FlashSell> {
                             height: 120,
                             width: 120,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                Icon(Icons.broken_image, size: 80),
+                            errorBuilder:
+                                (_, __, ___) =>
+                                    Icon(Icons.broken_image, size: 80),
                           ),
                         ),
                         SizedBox(width: 12),
@@ -253,13 +311,16 @@ class _FlashSellState extends State<FlashSell> {
                               Text(
                                 product["name"] ?? "No name",
                                 style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               SizedBox(height: 5),
 
-                              Text("Price: ${product["price"]}",
-                                  style: TextStyle(fontSize: 16)),
+                              Text(
+                                "Price: ${product["price"]}",
+                                style: TextStyle(fontSize: 16),
+                              ),
 
                               SizedBox(height: 6),
 
@@ -268,9 +329,10 @@ class _FlashSellState extends State<FlashSell> {
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: countdown == "Expired"
-                                      ? Colors.red
-                                      : Colors.green,
+                                  color:
+                                      countdown == "Expired"
+                                          ? Colors.red
+                                          : Colors.green,
                                 ),
                               ),
                             ],
@@ -283,11 +345,18 @@ class _FlashSellState extends State<FlashSell> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         ElevatedButton(
-                          onPressed: () => showTextDateTimeDialog(product),
-                          child: Text("Flash Sell"),
+                          onPressed:
+                              product["flashSell"] == true
+                                  ? () => _confirmFlashAction(product)
+                                  : () => showTextDateTimeDialog(product),
+                          child: Text(
+                            product["flashSell"] == true
+                                ? "Remove from Flash Sell"
+                                : "Flash Sell",
+                          ),
                         ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),

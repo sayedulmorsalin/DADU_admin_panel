@@ -7,10 +7,11 @@ class DatabaseService {
   final String _namesDocId = 'all_product_names';
 
   Future<List<Map<String, dynamic>>> getProducts() async {
-    final snapshot = await _db
-        .collection('products')
-        .orderBy('createdAt', descending: true)
-        .get();
+    final snapshot =
+        await _db
+            .collection('products')
+            .orderBy('createdAt', descending: true)
+            .get();
 
     return snapshot.docs.map((doc) {
       final data = doc.data();
@@ -19,6 +20,7 @@ class DatabaseService {
         "id": doc.id,
         "name": data['name'],
         "price": data['price'],
+        "freeGift": data['freeGift'] ?? false,
         "details": data['details'],
         "videoLink": data['videoLink'] ?? '',
         "brand": data['brand'] ?? 'Others',
@@ -97,23 +99,25 @@ class DatabaseService {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('logins')
-        .where(
-          'timestamp',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-        )
-        .get();
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('logins')
+            .where(
+              'timestamp',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+            )
+            .get();
 
     return snapshot.docs.length;
   }
 
   Future<List<Map<String, dynamic>>> getAllOrdersVerify() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('to_verify', isGreaterThan: [])
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('to_verify', isGreaterThan: [])
+              .get();
 
       List<Map<String, dynamic>> allOrders = [];
 
@@ -156,10 +160,11 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getAllShipped() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('to_ship', isGreaterThan: [])
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('to_ship', isGreaterThan: [])
+              .get();
 
       List<Map<String, dynamic>> allOrders = [];
 
@@ -202,10 +207,11 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getAllDelivered() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('completed', isGreaterThan: [])
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('completed', isGreaterThan: [])
+              .get();
 
       List<Map<String, dynamic>> allOrders = [];
 
@@ -246,9 +252,7 @@ class DatabaseService {
     }
   }
 
-  Future<void> moveItemsToShip({
-    required String userEmail,
-  }) async {
+  Future<void> moveItemsToShip({required String userEmail}) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot =
@@ -273,16 +277,11 @@ class DatabaseService {
 
       toVerify.clear();
 
-      transaction.update(userDoc, {
-        'to_verify': toVerify,
-        'to_ship': toShip,
-      });
+      transaction.update(userDoc, {'to_verify': toVerify, 'to_ship': toShip});
     });
   }
 
-  Future<void> moveItemsToCompleted({
-    required String userEmail,
-  }) async {
+  Future<void> moveItemsToCompleted({required String userEmail}) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot =
@@ -306,16 +305,11 @@ class DatabaseService {
       completed.addAll(toShip);
 
       toShip.clear();
-      transaction.update(userDoc, {
-        'to_ship': toShip,
-        'completed': completed,
-      });
+      transaction.update(userDoc, {'to_ship': toShip, 'completed': completed});
     });
   }
 
-  Future<void> removeItemsFromVerify({
-    required String userEmail,
-  }) async {
+  Future<void> removeItemsFromVerify({required String userEmail}) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot =
@@ -331,15 +325,11 @@ class DatabaseService {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) throw Exception("User document not found");
 
-      transaction.update(userDoc, {
-        'to_verify': [],
-      });
+      transaction.update(userDoc, {'to_verify': []});
     });
   }
 
-  Future<void> removeItemsFromShip({
-    required String userEmail,
-  }) async {
+  Future<void> removeItemsFromShip({required String userEmail}) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot =
@@ -355,9 +345,7 @@ class DatabaseService {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) throw Exception("User document not found");
 
-      transaction.update(userDoc, {
-        'to_ship': [],
-      });
+      transaction.update(userDoc, {'to_ship': []});
     });
   }
 
@@ -429,15 +417,17 @@ class DatabaseService {
     final startOfDay = DateTime(now.year, now.month, now.day);
     final startTimestamp = Timestamp.fromDate(startOfDay);
 
-    final users = await _db
-        .collection('users')
-        .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
-        .get();
+    final users =
+        await _db
+            .collection('users')
+            .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
+            .get();
 
-    final anonymous = await _db
-        .collection('anonymous_users')
-        .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
-        .get();
+    final anonymous =
+        await _db
+            .collection('anonymous_users')
+            .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
+            .get();
 
     return users.size + anonymous.size;
   }
@@ -478,14 +468,11 @@ class DatabaseService {
       });
 
       final nextMidnight = dayStart.add(const Duration(days: 1));
-      dayChangeTimer = Timer(
-        nextMidnight.difference(DateTime.now()),
-        () {
-          usersSub?.cancel();
-          anonymousSub?.cancel();
-          startListening(nextMidnight);
-        },
-      );
+      dayChangeTimer = Timer(nextMidnight.difference(DateTime.now()), () {
+        usersSub?.cancel();
+        anonymousSub?.cancel();
+        startListening(nextMidnight);
+      });
     }
 
     controller.onListen = () {
@@ -528,7 +515,9 @@ class DatabaseService {
   }
 
   Future<void> updateUserByEmail(
-      String email, Map<String, dynamic> updatedData) async {
+    String email,
+    Map<String, dynamic> updatedData,
+  ) async {
     final usersRef = FirebaseFirestore.instance.collection('users');
 
     final querySnapshot = await usersRef.where('email', isEqualTo: email).get();
@@ -597,10 +586,7 @@ class DatabaseService {
 
       return querySnapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        return {
-          'id': doc.id,
-          'imageUrl': data['imageUrl'],
-        };
+        return {'id': doc.id, 'imageUrl': data['imageUrl']};
       }).toList();
     } catch (e) {
       print("Error fetching active banners: $e");
@@ -638,24 +624,22 @@ class DatabaseService {
     await FirebaseFirestore.instance
         .collection("paymentNumber")
         .doc('9O1UpVqUrdyuTqiA3YQH')
-        .set(
-      {
-        'number': number,
-        'bkash': bkash ?? '',
-        'nagad': nagad ?? '',
-        'rocket': rocket ?? '',
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+        .set({
+          'number': number,
+          'bkash': bkash ?? '',
+          'nagad': nagad ?? '',
+          'rocket': rocket ?? '',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
   }
 
   Future<List<Map<String, dynamic>>> getAllFreeGiftRecevier() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('gift', isEqualTo: true)
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('gift', isEqualTo: true)
+              .get();
 
       List<Map<String, dynamic>> allReceivers = [];
 
@@ -674,19 +658,21 @@ class DatabaseService {
 
   Future<void> closeGiftDraw() async {
     try {
-      final usersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('gift', isEqualTo: true)
-          .get();
+      final usersSnapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .where('gift', isEqualTo: true)
+              .get();
 
       for (final doc in usersSnapshot.docs) {
         await doc.reference.update({'gift': false});
       }
 
-      final productsSnapshot = await FirebaseFirestore.instance
-          .collection('products')
-          .where('freeGift', isEqualTo: true)
-          .get();
+      final productsSnapshot =
+          await FirebaseFirestore.instance
+              .collection('products')
+              .where('freeGift', isEqualTo: true)
+              .get();
 
       for (final doc in productsSnapshot.docs) {
         await doc.reference.update({'freeGift': false});
@@ -698,20 +684,16 @@ class DatabaseService {
   }
 
   Future<void> updateGiftWinner(Map<String, dynamic> winner) async {
-    await FirebaseFirestore.instance.collection("free_gift").doc("winner").set(
-      {
-        "name": winner['name'] ?? winner['user_name'] ?? "Unknown",
+    await FirebaseFirestore.instance.collection("free_gift").doc("winner").set({
+      "name": winner['name'] ?? winner['user_name'] ?? "Unknown",
 
-        /// combine district + thana
-        "location":
-            "${winner['district'] ?? ''} ${winner['thana'] ?? ''}".trim(),
+      /// combine district + thana
+      "location": "${winner['district'] ?? ''} ${winner['thana'] ?? ''}".trim(),
 
-        "user_id": winner['user_id'] ?? winner['uid'] ?? "",
+      "user_id": winner['user_id'] ?? winner['uid'] ?? "",
 
-        "time": FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+      "time": FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Stream<Map<String, dynamic>> getAdAnalyticsStream() {
@@ -722,8 +704,10 @@ class DatabaseService {
         .map((snapshot) => snapshot.data() ?? {});
   }
 
-  Future<void> deleteCompletedOrder(
-      {required String userDocId, required Map<String, dynamic> orderData}) async {
+  Future<void> deleteCompletedOrder({
+    required String userDocId,
+    required Map<String, dynamic> orderData,
+  }) async {
     final userRef = _db.collection('users').doc(userDocId);
     try {
       await _db.runTransaction((transaction) async {

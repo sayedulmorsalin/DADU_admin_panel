@@ -26,7 +26,7 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
     super.initState();
     _drawController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1500),
     )..repeat();
     _loadReceivers();
   }
@@ -101,7 +101,7 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
       },
     );
 
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 5));
 
     if (!mounted) return;
 
@@ -276,27 +276,36 @@ class _DrawState extends State<Draw> with SingleTickerProviderStateMixin {
                       elevation: 3,
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-                        child: Row(
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: Text(
-                                "Total Receivers: ${receivers.length}",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    "Total Receivers: ${receivers.length}",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                            ElevatedButton.icon(
-                              onPressed: isDrawing ? null : _drawWinner,
-                              icon: const Icon(Icons.card_giftcard),
-                              label: const Text("Draw"),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: _closeDraw,
-                              icon: const Icon(Icons.close),
-                              label: const Text("Close Draw"),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: isDrawing ? null : _drawWinner,
+                                  icon: const Icon(Icons.card_giftcard),
+                                  label: const Text("Draw"),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _closeDraw,
+                                  icon: const Icon(Icons.close),
+                                  label: const Text("Close Draw"),
+                                ),
+                              ],
                             ),
                           ],
                         ),
