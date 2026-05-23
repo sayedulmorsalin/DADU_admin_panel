@@ -4,6 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+const Duration _sessionDuration = Duration(days: 3);
+
+Future<bool> _isSessionValid() async {
+  final prefs = await SharedPreferences.getInstance();
+  final loginTimestamp = prefs.getInt('login_timestamp');
+
+  if (loginTimestamp == null) {
+    return false;
+  }
+
+  final loginTime = DateTime.fromMillisecondsSinceEpoch(loginTimestamp);
+  final isExpired = DateTime.now().difference(loginTime) > _sessionDuration;
+
+  if (isExpired) {
+    await FirebaseAuth.instance.signOut();
+    await prefs.remove('login_timestamp');
+    return false;
+  }
+
+  return true;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +48,22 @@ class MyApp extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.active) {
             // User is logged in
             if (snapshot.hasData && snapshot.data != null) {
-              return const AdminDashboard();
+              return FutureBuilder<bool>(
+                future: _isSessionValid(),
+                builder: (context, sessionSnapshot) {
+                  if (!sessionSnapshot.hasData) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  if (sessionSnapshot.data == true) {
+                    return const AdminDashboard();
+                  }
+
+                  return const LoginPage();
+                },
+              );
             } else {
               // User is not logged in
               return const LoginPage();

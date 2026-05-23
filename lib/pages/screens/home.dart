@@ -12,6 +12,7 @@ import 'package:dadu_admin_panel/pages/screens/verify.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import 'gift_item.dart';
 import 'new_arrival.dart';
@@ -21,6 +22,8 @@ class AdminDashboard extends StatelessWidget {
 
   Future<void> _logout(BuildContext context) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('login_timestamp');
       await FirebaseAuth.instance.signOut();
       // Navigation is handled by StreamBuilder in main.dart
     } catch (e) {

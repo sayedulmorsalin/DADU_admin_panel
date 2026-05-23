@@ -31,7 +31,9 @@ class _LoginPageState extends State<LoginPage> {
     if (!_allowedEmails.contains(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Access Denied: You are not an authorized administrator.'),
+          content: Text(
+            'Access Denied: You are not an authorized administrator.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -46,9 +48,12 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
-      // Save login timestamp for 24h auto-logout
+      // Save login timestamp for 3-day session expiry
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('login_timestamp', DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(
+        'login_timestamp',
+        DateTime.now().millisecondsSinceEpoch,
+      );
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -65,13 +70,10 @@ class _LoginPageState extends State<LoginPage> {
       } else if (e.code == 'invalid-email') {
         message = 'The email address is badly formatted.';
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.redAccent,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
         );
       }
     } catch (e) {
@@ -94,7 +96,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -176,24 +178,37 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(height: 40),
-                      
+
                       // Email Field
                       TextFormField(
                         controller: _emailController,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Admin Email',
-                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                          prefixIcon: const Icon(Icons.email_rounded, color: Colors.white70),
+                          hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.email_rounded,
+                            color: Colors.white70,
+                          ),
                           filled: true,
                           fillColor: Colors.white.withOpacity(0.08),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
+                            borderSide: BorderSide(
+                              color: Colors.white.withOpacity(0.15),
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(color: Colors.white, width: 2),
+                            borderSide: const BorderSide(
+                              color: Colors.white,
+                              width: 2,
+                            ),
                           ),
                         ),
                         validator: (value) {
@@ -204,19 +219,29 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // Password Field
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Password',
-                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                          prefixIcon: const Icon(Icons.lock_rounded, color: Colors.white70),
+                          hintStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.lock_rounded,
+                            color: Colors.white70,
+                          ),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              _obscurePassword
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
                               color: Colors.white70,
                             ),
                             onPressed: () {
@@ -229,11 +254,16 @@ class _LoginPageState extends State<LoginPage> {
                           fillColor: Colors.white.withOpacity(0.08),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
+                            borderSide: BorderSide(
+                              color: Colors.white.withOpacity(0.15),
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(color: Colors.white, width: 2),
+                            borderSide: const BorderSide(
+                              color: Colors.white,
+                              width: 2,
+                            ),
                           ),
                         ),
                         validator: (value) {
@@ -244,7 +274,7 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                       const SizedBox(height: 40),
-                      
+
                       // Login Button
                       SizedBox(
                         width: double.infinity,
@@ -260,23 +290,24 @@ class _LoginPageState extends State<LoginPage> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
-                          child: _isLoading
-                              ? SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                    color: colorScheme.primary,
-                                    strokeWidth: 3,
+                          child:
+                              _isLoading
+                                  ? SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      color: colorScheme.primary,
+                                      strokeWidth: 3,
+                                    ),
+                                  )
+                                  : const Text(
+                                    'LOGIN',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.5,
+                                    ),
                                   ),
-                                )
-                              : const Text(
-                                  'LOGIN',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -300,7 +331,6 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 extension RoundedRectangleType on ElevatedButton {
-  static RoundedRectangleBorder rounded(double radius) => RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radius),
-      );
+  static RoundedRectangleBorder rounded(double radius) =>
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius));
 }

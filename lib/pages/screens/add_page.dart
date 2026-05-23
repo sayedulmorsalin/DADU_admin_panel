@@ -30,6 +30,7 @@ class _AddPageState extends State<AddPage> {
     'Pant',
     'Dadu',
     'Bundle',
+    'Combo Pack',
     'Others',
 
   ];
