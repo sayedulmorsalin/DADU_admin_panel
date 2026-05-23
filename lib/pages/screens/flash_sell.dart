@@ -15,18 +15,11 @@ class _FlashSellState extends State<FlashSell> {
 
   DatabaseService _dbService = DatabaseService();
   List<Map<String, dynamic>> products = [];
+  DateTime? _flashSellTimer;
+  bool _loadingTimer = false;
 
-  String formatRemainingTime(dynamic value) {
-    if (value == null) return "No flash";
-
-    DateTime endTime;
-    if (value is Timestamp) {
-      endTime = value.toDate();
-    } else if (value is String) {
-      endTime = DateTime.parse(value);
-    } else {
-      return "Invalid date";
-    }
+  String formatRemainingTime(DateTime? endTime) {
+    if (endTime == null) return "No timer set";
 
     final now = DateTime.now();
     Duration diff = endTime.difference(now);
@@ -41,10 +34,13 @@ class _FlashSellState extends State<FlashSell> {
   @override
   void initState() {
     super.initState();
+    _loadFlashSellTimer();
     _loadProducts();
 
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -60,21 +56,34 @@ class _FlashSellState extends State<FlashSell> {
     try {
       final loadedProducts = await _dbService.getProducts();
       loadedProducts.sort((a, b) {
-        final isAFlash =
-            a['flashSell'] == true &&
-            formatRemainingTime(a['flash-expire']) != "Expired";
-        final isBFlash =
-            b['flashSell'] == true &&
-            formatRemainingTime(b['flash-expire']) != "Expired";
+        final isAFlash = a['flashSell'] == true;
+        final isBFlash = b['flashSell'] == true;
 
         if (isAFlash && !isBFlash) return -1;
         if (!isAFlash && isBFlash) return 1;
 
         return 0;
       });
+      if (!mounted) return;
       setState(() => products = loadedProducts);
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
+    }
+  }
+
+  Future<void> _loadFlashSellTimer() async {
+    setState(() => _loadingTimer = true);
+
+    try {
+      final timer = await _dbService.getFlashSellTimer();
+      if (!mounted) return;
+      setState(() => _flashSellTimer = timer);
+    } catch (e) {
+      _showSnackBar("Failed to load timer: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _loadingTimer = false);
+      }
     }
   }
 
@@ -82,6 +91,117 @@ class _FlashSellState extends State<FlashSell> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _saveFlashSellTimer(DateTime timer) async {
+    try {
+      await _dbService.setFlashSellTimer(timer);
+      _showSnackBar("Flash sell timer saved successfully!");
+      await _loadFlashSellTimer();
+    } catch (e) {
+      _showSnackBar("Timer save failed: $e");
+    }
+  }
+
+  Future<void> _deleteFlashSellTimer() async {
+    try {
+      await _dbService.deleteFlashSellTimer();
+      _showSnackBar("Flash sell timer deleted successfully!");
+      await _loadFlashSellTimer();
+    } catch (e) {
+      _showSnackBar("Timer delete failed: $e");
+    }
+  }
+
+  void _showTimerDialog() {
+    DateTime? selectedDate = _flashSellTimer?.toLocal();
+    TimeOfDay? selectedTime =
+        _flashSellTimer == null
+            ? null
+            : TimeOfDay.fromDateTime(_flashSellTimer!.toLocal());
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                _flashSellTimer == null
+                    ? "Set flash sell timer"
+                    : "Modify flash sell timer",
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (pickedDate != null) {
+                        setState(() => selectedDate = pickedDate);
+                      }
+                    },
+                    child: Text(
+                      selectedDate == null
+                          ? "Pick Date"
+                          : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () async {
+                      TimeOfDay? pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: selectedTime ?? TimeOfDay.now(),
+                      );
+                      if (pickedTime != null) {
+                        setState(() => selectedTime = pickedTime);
+                      }
+                    },
+                    child: Text(
+                      selectedTime == null
+                          ? "Pick Time"
+                          : selectedTime!.format(context),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (selectedDate == null || selectedTime == null) {
+                      _showSnackBar("Please pick both date and time");
+                      return;
+                    }
+
+                    final finalDateTime = DateTime(
+                      selectedDate!.year,
+                      selectedDate!.month,
+                      selectedDate!.day,
+                      selectedTime!.hour,
+                      selectedTime!.minute,
+                    );
+
+                    Navigator.pop(context);
+                    await _saveFlashSellTimer(finalDateTime);
+                  },
+                  child: Text(_flashSellTimer == null ? "Save" : "Update"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _setFlashStatus(
@@ -92,14 +212,19 @@ class _FlashSellState extends State<FlashSell> {
 
     try {
       if (isFlash) {
-        // remove flash fields
         await _dbService.updateProduct(productId, {
           "flashSell": false,
+          "price": product["oldPrice"] ?? product["price"],
+          "oldPrice": FieldValue.delete(),
           "flash-expire": FieldValue.delete(),
         });
       } else {
-        // not used here, creation is handled by showTextDateTimeDialog
-        await _dbService.updateProduct(productId, {"flashSell": true});
+        await _dbService.updateProduct(productId, {
+          "flashSell": true,
+          "price": product["newFlashPrice"],
+          "oldPrice": product["price"],
+          "flash-expire": FieldValue.delete(),
+        });
       }
 
       _showSnackBar(
@@ -142,120 +267,79 @@ class _FlashSellState extends State<FlashSell> {
     );
   }
 
-  void showTextDateTimeDialog(Map<String, dynamic> product) {
+  void showFlashPriceDialog(Map<String, dynamic> product) {
     final TextEditingController textController = TextEditingController();
-    DateTime? selectedDate;
-    TimeOfDay? selectedTime;
 
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text("Write discount price"),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: textController,
-                    decoration: InputDecoration(
-                      labelText: "new price",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  SizedBox(height: 16),
+        return AlertDialog(
+          title: Text("Write discount price"),
+          content: TextField(
+            controller: textController,
+            decoration: InputDecoration(
+              labelText: "new price",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel"),
+            ),
 
-                  ElevatedButton(
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (pickedDate != null) {
-                        setState(() => selectedDate = pickedDate);
-                      }
-                    },
-                    child: Text(
-                      selectedDate == null
-                          ? "Pick Date"
-                          : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
-                    ),
-                  ),
+            ElevatedButton(
+              onPressed: () async {
+                if (_flashSellTimer == null) {
+                  Navigator.pop(context);
+                  _showSnackBar("Please set the flash sell timer first.");
+                  return;
+                }
 
-                  SizedBox(height: 12),
+                Navigator.pop(context);
 
-                  ElevatedButton(
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (pickedTime != null) {
-                        setState(() => selectedTime = pickedTime);
-                      }
-                    },
-                    child: Text(
-                      selectedTime == null
-                          ? "Pick Time"
-                          : selectedTime!.format(context),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text("Cancel"),
-                ),
+                final String productId = product["id"];
+                final String newPrice = textController.text.trim();
+                final String oldPrice = product["price"];
 
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
+                try {
+                  await _dbService.updateProduct(productId, {
+                    "flashSell": true,
+                    "price": newPrice,
+                    "oldPrice": oldPrice,
+                    "flash-expire": FieldValue.delete(),
+                  });
 
-                    DateTime? finalDateTime;
-                    if (selectedDate != null && selectedTime != null) {
-                      finalDateTime = DateTime(
-                        selectedDate!.year,
-                        selectedDate!.month,
-                        selectedDate!.day,
-                        selectedTime!.hour,
-                        selectedTime!.minute,
-                      );
-                    }
-
-                    final String productId = product["id"];
-                    final String newPrice = textController.text.trim();
-                    final String oldPrice = product["price"];
-
-                    try {
-                      await _dbService.updateProduct(productId, {
-                        "flashSell": true,
-                        "price": newPrice,
-                        "oldPrice": oldPrice,
-                        "flash-expire": finalDateTime,
-                      });
-
-                      _showSnackBar("Flash sell updated successfully!");
-                      _loadProducts();
-                    } catch (e) {
-                      _showSnackBar("Update failed: $e");
-                    }
-                  },
-                  child: Text("Submit"),
-                ),
-              ],
-            );
-          },
+                  _showSnackBar("Flash sell updated successfully!");
+                  _loadProducts();
+                } catch (e) {
+                  _showSnackBar("Update failed: $e");
+                }
+              },
+              child: Text("Submit"),
+            ),
+          ],
         );
       },
     );
   }
 
+  String _formatTimerLabel(DateTime? timer) {
+    if (timer == null) return "No timer set";
+
+    final localTimer = timer.toLocal();
+    final hour = localTimer.hour.toString().padLeft(2, '0');
+    final minute = localTimer.minute.toString().padLeft(2, '0');
+    final day = localTimer.day.toString().padLeft(2, '0');
+    final month = localTimer.month.toString().padLeft(2, '0');
+
+    return "$day/$month/${localTimer.year} $hour:$minute";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final remainingTime = formatRemainingTime(_flashSellTimer);
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -270,98 +354,167 @@ class _FlashSellState extends State<FlashSell> {
       ),
       body: Padding(
         padding: EdgeInsets.all(10),
-        child: ListView.builder(
-          itemCount: products.length,
-          itemBuilder: (context, index) {
-            final product = products[index];
-
-            String countdown = formatRemainingTime(product["flash-expire"]);
-
-            return Card(
-              elevation: 4,
-              margin: EdgeInsets.all(10),
+        child: Column(
+          children: [
+            Card(
+              elevation: 3,
+              margin: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
-                padding: EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: EdgeInsets.all(12),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            product["image5"] ?? "",
-                            height: 120,
-                            width: 120,
-                            fit: BoxFit.cover,
-                            errorBuilder:
-                                (_, __, ___) =>
-                                    Icon(Icons.broken_image, size: 80),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _flashSellTimer == null
+                                ? "No flash sell timer set"
+                                : "Flash sell timer",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        SizedBox(width: 12),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                product["name"] ?? "No name",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 5),
-
-                              Text(
-                                "Price: ${product["price"]}",
-                                style: TextStyle(fontSize: 16),
-                              ),
-
-                              SizedBox(height: 6),
-
-                              Text(
-                                "Remaining: $countdown",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      countdown == "Expired"
-                                          ? Colors.red
-                                          : Colors.green,
-                                ),
-                              ),
-                            ],
+                          SizedBox(height: 6),
+                          Text(
+                            _flashSellTimer == null
+                                ? "Set a shared timer for all flash sell products"
+                                : "Ends at: ${_formatTimerLabel(_flashSellTimer)}\nRemaining: $remainingTime",
+                            style: TextStyle(fontSize: 14),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    Column(
                       children: [
                         ElevatedButton(
-                          onPressed:
-                              product["flashSell"] == true
-                                  ? () => _confirmFlashAction(product)
-                                  : () => showTextDateTimeDialog(product),
+                          onPressed: _loadingTimer ? null : _showTimerDialog,
                           child: Text(
-                            product["flashSell"] == true
-                                ? "Remove from Flash Sell"
-                                : "Flash Sell",
+                            _flashSellTimer == null ? "Set Timer" : "Modify",
                           ),
+                        ),
+                        SizedBox(height: 8),
+                        OutlinedButton(
+                          onPressed:
+                              _loadingTimer || _flashSellTimer == null
+                                  ? null
+                                  : _deleteFlashSellTimer,
+                          child: Text("Delete"),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
-            );
-          },
+            ),
+            SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                itemCount: products.length,
+                itemBuilder: (context, index) {
+                  final product = products[index];
+
+                  final String countdown =
+                      product["flashSell"] == true
+                          ? remainingTime
+                          : "Not in flash sell";
+
+                  return Card(
+                    elevation: 4,
+                    margin: EdgeInsets.all(10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  product["image5"] ?? "",
+                                  height: 120,
+                                  width: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder:
+                                      (_, __, ___) =>
+                                          Icon(Icons.broken_image, size: 80),
+                                ),
+                              ),
+                              SizedBox(width: 12),
+
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product["name"] ?? "No name",
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+
+                                    Text(
+                                      "Price: ${product["price"]}",
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+
+                                    SizedBox(height: 6),
+
+                                    Text(
+                                      "Remaining: $countdown",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color:
+                                            countdown == "Expired"
+                                                ? Colors.red
+                                                : Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ElevatedButton(
+                                onPressed:
+                                    product["flashSell"] == true
+                                        ? () => _confirmFlashAction(product)
+                                        : _flashSellTimer == null
+                                        ? () => _showSnackBar(
+                                          "Set the flash sell timer first.",
+                                        )
+                                        : () => showFlashPriceDialog(product),
+                                child: Text(
+                                  product["flashSell"] == true
+                                      ? "Remove from Flash Sell"
+                                      : "Flash Sell",
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

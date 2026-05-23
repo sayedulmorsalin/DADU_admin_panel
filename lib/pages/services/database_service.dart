@@ -20,6 +20,7 @@ class DatabaseService {
         "id": doc.id,
         "name": data['name'],
         "price": data['price'],
+        "flashSell": data['flashSell'] ?? false,
         "freeGift": data['freeGift'] ?? false,
         "details": data['details'],
         "videoLink": data['videoLink'] ?? '',
@@ -33,6 +34,35 @@ class DatabaseService {
         "newArrival": data['newArrival'] ?? null,
       };
     }).toList();
+  }
+
+  Future<DateTime?> getFlashSellTimer() async {
+    final doc = await _db.collection('flash_sell_timer').doc('current').get();
+
+    if (!doc.exists) return null;
+
+    final data = doc.data();
+    final value = data?['time'];
+
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
+  }
+
+  Future<void> setFlashSellTimer(DateTime timer) {
+    return _db.collection('flash_sell_timer').doc('current').set({
+      'time': Timestamp.fromDate(timer),
+    });
+  }
+
+  Future<void> deleteFlashSellTimer() {
+    return _db.collection('flash_sell_timer').doc('current').delete();
   }
 
   Future<void> updateProduct(String id, Map<String, dynamic> data) {
