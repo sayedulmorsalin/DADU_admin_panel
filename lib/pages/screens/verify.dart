@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:clipboard/clipboard.dart';
 import '../services/database_service.dart';
 import '../services/image_delete_service.dart';
+import '../services/steadfast_service.dart';
 
 class Verify extends StatefulWidget {
   const Verify({super.key});
@@ -16,11 +17,22 @@ class _VerifyState extends State<Verify> {
   final DatabaseService _databaseService = DatabaseService();
   List<Map<String, dynamic>> orders = [];
   bool isLoading = true;
+  final Set<int> _expandedIndices = {};
 
   @override
   void initState() {
     super.initState();
     fetchOrders();
+  }
+
+  void _toggleExpansion(int index) {
+    setState(() {
+      if (_expandedIndices.contains(index)) {
+        _expandedIndices.remove(index);
+      } else {
+        _expandedIndices.add(index);
+      }
+    });
   }
 
   Future<void> fetchOrders() async {
@@ -274,6 +286,7 @@ class _VerifyState extends State<Verify> {
                   final phone =
                       (order['phone'] ?? order['user_phone'] ?? 'N/A')
                           .toString();
+                  final bool isExpanded = _expandedIndices.contains(index);
 
                   return Card(
                     margin: const EdgeInsets.all(10),
@@ -283,69 +296,90 @@ class _VerifyState extends State<Verify> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: ElevatedButton.icon(
-                              onPressed: () => _copyAllOrderInfo(order),
-                              icon: const Icon(Icons.content_copy, size: 18),
-                              label: const Text('Copy All'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                          InkWell(
+                            onTap: () => _toggleExpansion(index),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    buildSafeText("Customer Name", customerName,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18)),
+                                    buildSafeText("Phone", phone),
+                                  ],
                                 ),
-                                textStyle: const TextStyle(fontSize: 12),
+                                Icon(isExpanded
+                                    ? Icons.expand_less
+                                    : Icons.expand_more),
+                              ],
+                            ),
+                          ),
+                          if (isExpanded) ...[
+                            const Divider(),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _copyAllOrderInfo(order),
+                                icon: const Icon(Icons.content_copy, size: 18),
+                                label: const Text('Copy All'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  textStyle: const TextStyle(fontSize: 12),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          buildCopyableRow("Customer Name", customerName),
-                          buildCopyableRow("Phone", phone),
-                          buildCopyableRow(
-                            "District",
-                            order['district'] ?? 'N/A',
-                          ),
-                          buildCopyableRow("Thana", order['thana'] ?? 'N/A'),
-                          buildCopyableRow(
-                            "Address",
-                            order['address'] ?? 'N/A',
-                          ),
-
-                          Row(
-                            children: [
-                              Expanded(child: buildSafeText("Email", email)),
-                              if (email.isNotEmpty && email != 'N/A')
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.content_copy,
-                                    size: 18,
-                                  ),
-                                  onPressed: () => _copyEmail(email),
-                                  tooltip: 'Copy email',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 10),
-                          const Text(
-                            "Items:",
-                            style: TextStyle(
-                              decoration: TextDecoration.none,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                            const SizedBox(height: 8),
+                            buildCopyableRow(
+                              "District",
+                              order['district'] ?? 'N/A',
                             ),
-                          ),
-
-                          if (items.isNotEmpty)
-                            ...items.map((item) {
-                              final itemMap =
-                                  item is Map<String, dynamic> ? item : {};
-                              return ListTile(
-                                leading:
-                                    itemMap['imageUrl']?.toString().trim().isNotEmpty == true
-                                        ? Image.network(
+                            buildCopyableRow("Thana", order['thana'] ?? 'N/A'),
+                            buildCopyableRow(
+                              "Address",
+                              order['address'] ?? 'N/A',
+                            ),
+                            Row(
+                              children: [
+                                Expanded(child: buildSafeText("Email", email)),
+                                if (email.isNotEmpty && email != 'N/A')
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.content_copy,
+                                      size: 18,
+                                    ),
+                                    onPressed: () => _copyEmail(email),
+                                    tooltip: 'Copy email',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              "Items:",
+                              style: TextStyle(
+                                decoration: TextDecoration.none,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (items.isNotEmpty)
+                              ...items.map((item) {
+                                final itemMap =
+                                    item is Map<String, dynamic> ? item : {};
+                                return ListTile(
+                                  leading: itemMap['imageUrl']
+                                              ?.toString()
+                                              .trim()
+                                              .isNotEmpty ==
+                                          true
+                                      ? Image.network(
                                           itemMap['imageUrl'].toString(),
                                           width: 50,
                                           height: 50,
@@ -353,152 +387,146 @@ class _VerifyState extends State<Verify> {
                                               (context, error, stackTrace) =>
                                                   const Icon(Icons.error),
                                         )
-                                        : const Icon(Icons.image),
-                                title: Text(
-                                  itemMap['name']?.toString() ??
-                                      'Unknown Product',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                      : const Icon(Icons.image),
+                                  title: Text(
+                                    itemMap['name']?.toString() ??
+                                        'Unknown Product',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                ),
-                                subtitle: Text(
-                                  "Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                  subtitle: Text(
+                                    "Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-
-                          if (items.isEmpty)
-                            const Text(
-                              "No items found",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-
-                          const SizedBox(height: 10),
-                          buildSafeText("Subtotal", order['subtotal']),
-                          buildSafeText(
-                            "Total",
-                            order['total'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          buildSafeText(
-                            "Delivery fee",
-                            order['deliveryCharge'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: Colors.blue,
-                            ),
-                          ),
-
-                          buildSafeText("Time", _getFormattedTime(order)),
-                          buildSafeText(
-                            "Payment Method",
-                            order['paymentMethod'],
-                          ),
-                          buildSafeText(
-                            "Point in account",
-                            order['deliveryPoints'],
-                          ),
-                          buildSafeText(
-                            "Point in use",
-                            _safeNum(order['baseDeliveryCharge']) -
-                                _safeNum(order['deliveryCharge']),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          buildSafeText(
-                            "Request for free delivery",
-                            order['freeDeliveryUsed'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: Colors.blue,
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-                          const Text(
-                            "Payment Proof:",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-
-                          if (order['paymentProof'] != null &&
-                              order['paymentProof'].toString().isNotEmpty)
-                            Image.network(
-                              order['paymentProof'].toString(),
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (context, error, stackTrace) =>
-                                      const Text("Could not load image"),
-                            )
-                          else
-                            const Text(
-                              "No payment proof provided",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                onPressed: () => _rejectOrder(order, index),
-                                child: const Text(
-                                  'Reject',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                  ),
-                                ),
+                                );
+                              }).toList(),
+                            if (items.isEmpty)
+                              const Text(
+                                "No items found",
+                                style: TextStyle(color: Colors.grey),
                               ),
-                              const SizedBox(width: 40),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                onPressed: () => _acceptOrder(order, index),
-                                child: const Text(
-                                  'Accept',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                  ),
-                                ),
+                            const SizedBox(height: 10),
+                            buildSafeText("Subtotal", order['subtotal']),
+                            buildSafeText(
+                              "Total",
+                              order['total'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
                               ),
-                            ],
-                          ),
+                            ),
+                            buildSafeText(
+                              "Delivery fee",
+                              order['deliveryCharge'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            buildSafeText("Time", _getFormattedTime(order)),
+                            buildSafeText(
+                              "Payment Method",
+                              order['paymentMethod'],
+                            ),
+                            buildSafeText(
+                              "Point in account",
+                              order['deliveryPoints'],
+                            ),
+                            buildSafeText(
+                              "Point in use",
+                              _safeNum(order['baseDeliveryCharge']) -
+                                  _safeNum(order['deliveryCharge']),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            buildSafeText(
+                              "Request for free delivery",
+                              order['freeDeliveryUsed'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              "Payment Proof:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (order['paymentProof'] != null &&
+                                order['paymentProof'].toString().isNotEmpty)
+                              Image.network(
+                                order['paymentProof'].toString(),
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Text("Could not load image"),
+                              )
+                            else
+                              const Text(
+                                "No payment proof provided",
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.redAccent,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: () => _rejectOrder(order, index),
+                                  child: const Text(
+                                    'Reject',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 40),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onPressed: () => _acceptOrder(order, index),
+                                  child: const Text(
+                                    'Accept',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -567,6 +595,13 @@ class _VerifyState extends State<Verify> {
   }
 
   Future<void> _acceptOrder(Map<String, dynamic> order, int index) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       final String userEmail =
           (order['customerEmail'] ?? order['user_email'] ?? '').toString();
@@ -574,6 +609,72 @@ class _VerifyState extends State<Verify> {
         throw Exception('User email not found for this order');
       }
       final orderLabel = _getNotificationOrderLabel(order);
+
+      // --- Steadfast Courier Integration ---
+      final SteadfastService steadfastService = SteadfastService();
+      
+      // Construct address with District and Thana
+      String fullAddress = order['address'] ?? '';
+      if (order['thana'] != null) fullAddress += ', ${order['thana']}';
+      if (order['district'] != null) fullAddress += ', ${order['district']}';
+      
+      if (fullAddress.length > 250) {
+        fullAddress = fullAddress.substring(0, 250);
+      }
+
+      // Determine COD amount based on payment method
+      double codAmount = 0;
+      final String paymentMethod = order['paymentMethod']?.toString().toLowerCase() ?? '';
+      if (paymentMethod == 'cod' || paymentMethod.contains('cash')) {
+        codAmount = _safeNum(order['total']).toDouble();
+      }
+
+      // Generate a unique invoice if not present
+      String invoice = order['orderId']?.toString() ?? order['order_id']?.toString() ?? 
+                       'INV-${DateTime.now().millisecondsSinceEpoch}';
+
+      // Clean phone number (Must be 11 digits)
+      String phone = (order['phone'] ?? order['user_phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+      if (phone.startsWith('88')) {
+        phone = phone.substring(2);
+      }
+      if (phone.length > 11) {
+        phone = phone.substring(phone.length - 11);
+      }
+
+      if (phone.length != 11) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid phone number: $phone. Must be 11 digits.')),
+        );
+        return;
+      }
+
+      String recipientName = (order['customerName'] ?? order['user_name'] ?? 'Customer').toString();
+      if (recipientName.length > 100) {
+        recipientName = recipientName.substring(0, 100);
+      }
+
+      try {
+        await steadfastService.createOrder(
+          invoice: invoice,
+          recipientName: recipientName,
+          recipientPhone: phone,
+          recipientAddress: fullAddress,
+          codAmount: codAmount,
+          note: order['note'] ?? 'Deliver as soon as possible',
+        );
+      } catch (e) {
+        print("Steadfast Error: $e");
+        // We might want to continue even if Steadfast fails, or stop here.
+        // For now, let's stop and inform the user.
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Steadfast Error: $e. Order not accepted.')),
+        );
+        return;
+      }
+      // --- End Steadfast Integration ---
 
       await _databaseService.moveItemsToShip(userEmail: userEmail);
 
@@ -592,14 +693,17 @@ class _VerifyState extends State<Verify> {
         body: 'Your order $orderLabel has been accepted and is now being prepared for shipping.',
       );
 
+      Navigator.pop(context); // Close loading dialog
+
       setState(() {
         orders.removeAt(index);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order accepted successfully')),
+        const SnackBar(content: Text('Order accepted and sent to Steadfast successfully')),
       );
     } catch (e) {
+      Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));

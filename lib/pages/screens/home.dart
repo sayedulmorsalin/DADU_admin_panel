@@ -9,6 +9,7 @@ import 'package:dadu_admin_panel/pages/screens/send_notification.dart';
 import 'package:dadu_admin_panel/pages/screens/shipping.dart';
 import 'package:dadu_admin_panel/pages/screens/update_payment.dart';
 import 'package:dadu_admin_panel/pages/screens/verify.dart';
+import 'package:dadu_admin_panel/pages/screens/receive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -99,6 +100,7 @@ class _AdminHomeState extends State<AdminHome> {
   late Stream<int> todayLoginsStream;
   late Stream<int> verifyCount;
   late Stream<int> shippingCount;
+  late Stream<int> receiveCount;
   late Stream<int> deliveredCount;
   late final downloadCount;
   late final accountCount;
@@ -112,6 +114,7 @@ class _AdminHomeState extends State<AdminHome> {
     todayLoginsStream = _dbService.getTodayLoginsStream();
     verifyCount = _dbService.getVerifyCountStream();
     shippingCount = _dbService.getShippingCountStream();
+    receiveCount = _dbService.getReceiveCountStream();
     deliveredCount = _dbService.getCompletedCountStream();
     downloadCount = _dbService.getTotalDownloadCount();
     accountCount = _dbService.getTotalRegisteredCountStream();
@@ -256,6 +259,19 @@ class _AdminHomeState extends State<AdminHome> {
                 },
               ),
               StreamBuilder<int>(
+                stream: receiveCount,
+                builder: (context, snapshot) {
+                  final count = snapshot.data ?? 0;
+                  return _buildActionButton(
+                    icon: Icons.assignment_return,
+                    label: "Receive",
+                    count: count,
+                    color: Colors.teal,
+                    onPressed: () => _navigateToReceive(context),
+                  );
+                },
+              ),
+              StreamBuilder<int>(
                 stream: deliveredCount,
                 builder: (context, snapshot) {
                   final count = snapshot.data ?? 0;
@@ -351,6 +367,7 @@ class _AdminHomeState extends State<AdminHome> {
               ),
             ],
           ),
+          const SizedBox(height: 15),
           const SizedBox(height: 30),
           _buildLastLoginList(),
         ],
@@ -640,5 +657,12 @@ class _AdminHomeState extends State<AdminHome> {
 
   void _navigateToDraw(BuildContext context) {
     Navigator.push(context, MaterialPageRoute(builder: (context) => Draw()));
+  }
+
+  void _navigateToReceive(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ReceivePage()),
+    );
   }
 }

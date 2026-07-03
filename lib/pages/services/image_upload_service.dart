@@ -27,6 +27,13 @@ class ImageUploadService {
     return {'url5': url5, 'url20': url20};
   }
 
+  /// Upload additional image with 50 quality
+  Future<String> uploadAdditionalImage(File image) async {
+    final bytes = await _compressImage(image, 50);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return await _uploadToR2(bytes, 'img_ext_$timestamp.jpg');
+  }
+
   /// Upload banner image
   Future<String> uploadCompressedBannerImages(File originalImage) async {
     try {

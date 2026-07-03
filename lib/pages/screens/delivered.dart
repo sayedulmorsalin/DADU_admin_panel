@@ -13,11 +13,22 @@ class _DeliveredState extends State<Delivered> {
   final DatabaseService _databaseService = DatabaseService();
   List<Map<String, dynamic>> delivered = [];
   bool isLoading = true;
+  final Set<int> _expandedIndices = {};
 
   @override
   void initState() {
     super.initState();
     fetchOrders();
+  }
+
+  void _toggleExpansion(int index) {
+    setState(() {
+      if (_expandedIndices.contains(index)) {
+        _expandedIndices.remove(index);
+      } else {
+        _expandedIndices.add(index);
+      }
+    });
   }
 
   Future<void> fetchOrders() async {
@@ -140,6 +151,7 @@ class _DeliveredState extends State<Delivered> {
         itemBuilder: (context, index) {
           final order = delivered[index];
           final items = getItems(order);
+          final bool isExpanded = _expandedIndices.contains(index);
 
           return Card(
             margin: const EdgeInsets.all(10),
@@ -149,85 +161,103 @@ class _DeliveredState extends State<Delivered> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  buildSafeText("Customer Name", order['customerName'] ?? order['user_name'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                  buildSafeText("Email", order['customerEmail'] ?? order['user_email']),
-                  buildSafeText("Phone", order['phone'] ?? order['user_phone'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                  buildSafeText("District", order['district'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                  buildSafeText("Thana", order['thana'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                  buildSafeText("Address", order['address'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Items:",
-                    style: TextStyle(
-                      decoration: TextDecoration.none,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                  InkWell(
+                    onTap: () => _toggleExpansion(index),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            buildSafeText("Customer Name", order['customerName'] ?? order['user_name'],
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            buildSafeText("Phone", order['phone'] ?? order['user_phone'],
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                          ],
+                        ),
+                        Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                      ],
                     ),
                   ),
 
-                  // Safe items display
-                  if (items.isNotEmpty) ...items.map((item) {
-                    final itemMap = item is Map<String, dynamic> ? item : {};
-                    return ListTile(
-                      leading: itemMap['imageUrl'] != null
-                          ? Image.network(
-                        itemMap['imageUrl']!,
-                        width: 50,
-                        height: 50,
-                        errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.error),
-                      )
-                          : const Icon(Icons.image),
-                      title: Text(
-                        itemMap['name']?.toString() ?? 'Unknown Product',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                  if (isExpanded) ...[
+                    const Divider(),
+                    buildSafeText("Email", order['customerEmail'] ?? order['user_email']),
+                    buildSafeText("District", order['district'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                    buildSafeText("Thana", order['thana'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                    buildSafeText("Address", order['address'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+
+                    const SizedBox(height: 10),
+                    const Text(
+                      "Items:",
+                      style: TextStyle(
+                        decoration: TextDecoration.none,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                      subtitle: Text(
-                        "Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-
-                  if (items.isEmpty)
-                    const Text("No items found", style: TextStyle(color: Colors.grey)),
-
-                  const SizedBox(height: 10),
-                  buildSafeText("Subtotal", order['subtotal']),
-                  buildSafeText("Total", order['total'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  buildSafeText("Delivery fee", order['deliveryCharge'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
-
-                  // Safe timestamp display
-                  buildSafeText("Time", _getFormattedTime(order)),
-
-                  buildSafeText("Payment Method", order['paymentMethod']),
-                  buildSafeText("Point in account", order['deliveryPoints']),
-                  buildSafeText("Point in use",
-                      _safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
-                  buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteOrder(order),
                     ),
-                  ),
+
+                    // Safe items display
+                    if (items.isNotEmpty) ...items.map((item) {
+                      final itemMap = item is Map<String, dynamic> ? item : {};
+                      return ListTile(
+                        leading: itemMap['imageUrl'] != null
+                            ? Image.network(
+                          itemMap['imageUrl']!,
+                          width: 50,
+                          height: 50,
+                          errorBuilder: (context, error, stackTrace) =>
+                          const Icon(Icons.error),
+                        )
+                            : const Icon(Icons.image),
+                        title: Text(
+                          itemMap['name']?.toString() ?? 'Unknown Product',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+
+                    if (items.isEmpty)
+                      const Text("No items found", style: TextStyle(color: Colors.grey)),
+
+                    const SizedBox(height: 10),
+                    buildSafeText("Subtotal", order['subtotal']),
+                    buildSafeText("Total", order['total'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    buildSafeText("Delivery fee", order['deliveryCharge'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+
+                    // Safe timestamp display
+                    buildSafeText("Time", _getFormattedTime(order)),
+
+                    buildSafeText("Payment Method", order['paymentMethod']),
+                    buildSafeText("Point in account", order['deliveryPoints']),
+                    buildSafeText("Point in use",
+                        _safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+                    buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteOrder(order),
+                      ),
+                    ),
+                  ],
                 ],
               ), 
             ),
