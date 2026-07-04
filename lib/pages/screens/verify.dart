@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:clipboard/clipboard.dart';
 import '../services/database_service.dart';
+import '../services/database_service.dart';
 import '../services/image_delete_service.dart';
-import '../services/steadfast_service.dart';
 
 class Verify extends StatefulWidget {
   const Verify({super.key});
@@ -610,72 +610,6 @@ class _VerifyState extends State<Verify> {
       }
       final orderLabel = _getNotificationOrderLabel(order);
 
-      // --- Steadfast Courier Integration ---
-      final SteadfastService steadfastService = SteadfastService();
-      
-      // Construct address with District and Thana
-      String fullAddress = order['address'] ?? '';
-      if (order['thana'] != null) fullAddress += ', ${order['thana']}';
-      if (order['district'] != null) fullAddress += ', ${order['district']}';
-      
-      if (fullAddress.length > 250) {
-        fullAddress = fullAddress.substring(0, 250);
-      }
-
-      // Determine COD amount based on payment method
-      double codAmount = 0;
-      final String paymentMethod = order['paymentMethod']?.toString().toLowerCase() ?? '';
-      if (paymentMethod == 'cod' || paymentMethod.contains('cash')) {
-        codAmount = _safeNum(order['total']).toDouble();
-      }
-
-      // Generate a unique invoice if not present
-      String invoice = order['orderId']?.toString() ?? order['order_id']?.toString() ?? 
-                       'INV-${DateTime.now().millisecondsSinceEpoch}';
-
-      // Clean phone number (Must be 11 digits)
-      String phone = (order['phone'] ?? order['user_phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
-      if (phone.startsWith('88')) {
-        phone = phone.substring(2);
-      }
-      if (phone.length > 11) {
-        phone = phone.substring(phone.length - 11);
-      }
-
-      if (phone.length != 11) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid phone number: $phone. Must be 11 digits.')),
-        );
-        return;
-      }
-
-      String recipientName = (order['customerName'] ?? order['user_name'] ?? 'Customer').toString();
-      if (recipientName.length > 100) {
-        recipientName = recipientName.substring(0, 100);
-      }
-
-      try {
-        await steadfastService.createOrder(
-          invoice: invoice,
-          recipientName: recipientName,
-          recipientPhone: phone,
-          recipientAddress: fullAddress,
-          codAmount: codAmount,
-          note: order['note'] ?? 'Deliver as soon as possible',
-        );
-      } catch (e) {
-        print("Steadfast Error: $e");
-        // We might want to continue even if Steadfast fails, or stop here.
-        // For now, let's stop and inform the user.
-        Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Steadfast Error: $e. Order not accepted.')),
-        );
-        return;
-      }
-      // --- End Steadfast Integration ---
-
       await _databaseService.moveItemsToShip(userEmail: userEmail);
 
       if (order['freeDeliveryUsed'] == true) {
@@ -700,7 +634,7 @@ class _VerifyState extends State<Verify> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order accepted and sent to Steadfast successfully')),
+        const SnackBar(content: Text('Order accepted and moved to shipping.')),
       );
     } catch (e) {
       Navigator.pop(context); // Close loading dialog

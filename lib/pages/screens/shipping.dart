@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/database_service.dart';
 import '../services/image_delete_service.dart';
+import '../services/steadfast_service.dart';
 
 class Shipping extends StatefulWidget {
   const Shipping({super.key});
@@ -237,6 +238,21 @@ class _ShippingState extends State<Shipping> {
     }
 
     return previousRow[b.length];
+  }
+
+  String _getNotificationOrderLabel(Map<String, dynamic> order) {
+    final dynamic explicitOrderId = order['order_id'];
+    if (explicitOrderId != null &&
+        explicitOrderId.toString().trim().isNotEmpty) {
+      return explicitOrderId.toString().trim();
+    }
+
+    final dynamic phone = order['phone'] ?? order['user_phone'];
+    if (phone != null && phone.toString().trim().isNotEmpty) {
+      return phone.toString().trim();
+    }
+
+    return 'your order';
   }
 
   String _getFormattedTime(Map<String, dynamic> order) {
@@ -614,11 +630,100 @@ class _ShippingState extends State<Shipping> {
     Map<String, dynamic> order,
     String userEmail,
   ) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
+      final orderLabel = _getNotificationOrderLabel(order);
+
+      // --- Steadfast Courier Integration ---
+      final SteadfastService steadfastService = SteadfastService();
+
+      // Construct address with District and Thana
+      String fullAddress = order['address'] ?? '';
+      if (order['thana'] != null) fullAddress += ', ${order['thana']}';
+      if (order['district'] != null) fullAddress += ', ${order['district']}';
+
+      if (fullAddress.length > 250) {
+        fullAddress = fullAddress.substring(0, 250);
+      }
+
+      // Determine COD amount based on payment method
+      double codAmount = 0;
+      final String paymentMethod =
+          order['paymentMethod']?.toString().toLowerCase() ?? '';
+      if (paymentMethod == 'cod' || paymentMethod.contains('cash')) {
+        codAmount = _safeNum(order['total']).toDouble();
+      }
+
+      // Generate a unique invoice if not present
+      String invoice = order['order_id']?.toString() ??
+          'INV-${DateTime.now().millisecondsSinceEpoch}';
+
+      // Clean phone number (Must be 11 digits)
+      String phone = (order['phone'] ?? order['user_phone'] ?? '')
+          .toString()
+          .replaceAll(RegExp(r'[^0-9]'), '');
+      if (phone.startsWith('88')) {
+        phone = phone.substring(2);
+      }
+      if (phone.length > 11) {
+        phone = phone.substring(phone.length - 11);
+      }
+
+      if (phone.length != 11) {
+        Navigator.pop(context);
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Invalid phone number: $phone. Must be 11 digits.'),
+          ),
+        );
+        return;
+      }
+
+      String recipientName =
+          (order['customerName'] ?? order['user_name'] ?? 'Customer')
+              .toString();
+      if (recipientName.length > 100) {
+        recipientName = recipientName.substring(0, 100);
+      }
+
+      try {
+        await steadfastService.createOrder(
+          invoice: invoice,
+          recipientName: recipientName,
+          recipientPhone: phone,
+          recipientAddress: fullAddress,
+          codAmount: codAmount,
+          note: order['note'] ?? 'Deliver as soon as possible',
+        );
+      } catch (e) {
+        print("Steadfast Error: $e");
+        Navigator.pop(context); // Close loading dialog
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text('Steadfast Error: $e. Order not processed.')),
+        );
+        return;
+      }
+      // --- End Steadfast Integration ---
 
       // Move order to receive
       await _databaseService.moveItemsToReceive(userEmail: userEmail);
+
+      // Send Notification
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Shipped',
+        body:
+            'Your order $orderLabel has been shipped and is on its way to you!',
+      );
+
+      Navigator.pop(context); // Close loading dialog
 
       // Update UI
       setState(() {
@@ -627,9 +732,12 @@ class _ShippingState extends State<Shipping> {
       });
 
       _scaffoldMessengerKey.currentState!.showSnackBar(
-        const SnackBar(content: Text("Order marked as Shipped")),
+        const SnackBar(
+          content: Text('Order marked as Shipped and sent to Steadfast'),
+        ),
       );
     } catch (e) {
+      Navigator.pop(context); // Close loading dialog
       _scaffoldMessengerKey.currentState!.showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
