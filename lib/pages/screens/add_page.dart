@@ -30,15 +30,22 @@ class _AddPageState extends State<AddPage> {
     'Nike',
     'Puma',
     'Dadu',
+    'Mizuno',
     'Others',
   ];
 
   final List<String> categories = [
+    'Boots Master Grade',
+    'Boots Master Grade Copy',
+    'Boots 4 Grade',
+    'Boots China Copy',
+    'Boots Turf',
     'Gloves',
-    'Other_boots',
     'Jersey',
     'Pant',
-    'Bundle',
+    'Bag',
+    'Safe Guard',
+    'Socks',
     'Combo Pack',
     'Others',
   ];
@@ -46,6 +53,8 @@ class _AddPageState extends State<AddPage> {
   final TextEditingController _addNameController = TextEditingController();
   final TextEditingController _addPriceController = TextEditingController();
   final TextEditingController _addDeliveryFeeController = TextEditingController();
+  final TextEditingController _addFreeCoinController = TextEditingController();
+  final TextEditingController _addSizeController = TextEditingController();
   final TextEditingController _addDetailsController = TextEditingController();
   final TextEditingController _addVideoController = TextEditingController();
   XFile? _pickedImage;
@@ -54,15 +63,19 @@ class _AddPageState extends State<AddPage> {
   String? _addErrorMessage;
   String _selectedBrand = 'Adidas';
   String _selectedCategory = 'Others';
+  String _selectedStock = 'Available';
   bool _isUploading = false;
 
   late TextEditingController _editNameController;
   late TextEditingController _editPriceController;
   late TextEditingController _editDeliveryFeeController;
+  late TextEditingController _editFreeCoinController;
+  late TextEditingController _editSizeController;
   late TextEditingController _editDetailsController;
   late TextEditingController _editVideoController;
   late String _editSelectedBrand;
   late String _editSelectedCategory;
+  late String _editSelectedStock;
   String? _editErrorMessage;
   Map<String, dynamic>? _editingProduct;
   XFile? _editPickedImage;
@@ -91,11 +104,14 @@ class _AddPageState extends State<AddPage> {
     _editNameController = TextEditingController();
     _editPriceController = TextEditingController();
     _editDeliveryFeeController = TextEditingController();
+    _editFreeCoinController = TextEditingController();
+    _editSizeController = TextEditingController();
     _editDetailsController = TextEditingController();
     _editVideoController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
     _editSelectedBrand = 'Adidas';
     _editSelectedCategory = 'Others';
+    _editSelectedStock = 'Available';
   }
 
   void _onSearchChanged() {
@@ -206,10 +222,13 @@ class _AddPageState extends State<AddPage> {
     _editNameController.text = _editingProduct!['name'];
     _editPriceController.text = _editingProduct!['price'];
     _editDeliveryFeeController.text = _editingProduct!['deliveryFee'] ?? '0';
+    _editFreeCoinController.text = _editingProduct!['freeCoin']?.toString() ?? '0';
+    _editSizeController.text = _editingProduct!['size'] ?? '';
     _editDetailsController.text = _editingProduct!['details'];
     _editVideoController.text = _editingProduct!['videoLink'] ?? '';
     _editSelectedBrand = brands.contains(_editingProduct!['brand']) ? _editingProduct!['brand'] : 'Others';
     _editSelectedCategory = categories.contains(_editingProduct!['category']) ? _editingProduct!['category'] : 'Others';
+    _editSelectedStock = ['Available', 'Not Available'].contains(_editingProduct!['stock']) ? _editingProduct!['stock'] : 'Available';
     _editErrorMessage = null;
     _editPickedImage = null;
     _editPickedImage2 = null;
@@ -315,6 +334,23 @@ class _AddPageState extends State<AddPage> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: _editFreeCoinController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Free Coin",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editSizeController,
+                  decoration: const InputDecoration(
+                    labelText: "Size",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
                   controller: _editDetailsController,
                   maxLines: 3,
                   decoration: const InputDecoration(
@@ -358,6 +394,21 @@ class _AddPageState extends State<AddPage> {
                   },
                   decoration: const InputDecoration(
                     labelText: "Category",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _editSelectedStock,
+                  items: ['Available', 'Not Available'].map((s) {
+                    return DropdownMenuItem(value: s, child: Text(s));
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => _editSelectedStock = value!);
+                    setState(() {});
+                  },
+                  decoration: const InputDecoration(
+                    labelText: "Stock",
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -439,6 +490,9 @@ class _AddPageState extends State<AddPage> {
         "name": _editNameController.text,
         "price": _editPriceController.text,
         "deliveryFee": _editDeliveryFeeController.text,
+        "freeCoin": int.tryParse(_editFreeCoinController.text) ?? 0,
+        "size": _editSizeController.text,
+        "stock": _editSelectedStock,
         "details": _editDetailsController.text,
         "brand": _editSelectedBrand,
         "category": _editSelectedCategory,
@@ -454,6 +508,9 @@ class _AddPageState extends State<AddPage> {
         'name': updatedProduct['name'],
         'price': updatedProduct['price'],
         'deliveryFee': updatedProduct['deliveryFee'],
+        'freeCoin': updatedProduct['freeCoin'],
+        'size': updatedProduct['size'],
+        'stock': updatedProduct['stock'],
         'details': updatedProduct['details'],
         'brand': updatedProduct['brand'],
         'category': updatedProduct['category'],
@@ -466,7 +523,7 @@ class _AddPageState extends State<AddPage> {
       });
 
       if (oldName != updatedProduct['name']) {
-        await _dbService.updateProductName(oldName, updatedProduct['name']);
+        await _dbService.updateProductName(oldName as String, updatedProduct['name'] as String);
       }
 
       setState(() {
@@ -550,6 +607,8 @@ class _AddPageState extends State<AddPage> {
     _addNameController.clear();
     _addPriceController.clear();
     _addDeliveryFeeController.clear();
+    _addFreeCoinController.clear();
+    _addSizeController.clear();
     _addDetailsController.clear();
     _addVideoController.clear();
     _pickedImage = null;
@@ -558,6 +617,7 @@ class _AddPageState extends State<AddPage> {
     _addErrorMessage = null;
     _selectedBrand = 'Adidas';
     _selectedCategory = 'Others';
+    _selectedStock = 'Available';
     _isUploading = false;
 
     showModalBottomSheet(
@@ -656,6 +716,23 @@ class _AddPageState extends State<AddPage> {
               ),
               const SizedBox(height: 12),
               TextField(
+                controller: _addFreeCoinController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Free Coin",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addSizeController,
+                decoration: const InputDecoration(
+                  labelText: "Size",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
                 controller: _addDetailsController,
                 maxLines: 4,
                 decoration: const InputDecoration(
@@ -705,6 +782,22 @@ class _AddPageState extends State<AddPage> {
                 },
                 decoration: const InputDecoration(
                   labelText: "Category",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedStock,
+                items: ['Available', 'Not Available'].map((s) {
+                  return DropdownMenuItem(value: s, child: Text(s));
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedStock = value!;
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: "Stock",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -768,6 +861,9 @@ class _AddPageState extends State<AddPage> {
         "name": _addNameController.text,
         "price": _addPriceController.text,
         "deliveryFee": _addDeliveryFeeController.text,
+        "freeCoin": int.tryParse(_addFreeCoinController.text) ?? 0,
+        "size": _addSizeController.text,
+        "stock": _selectedStock,
         "details": _addDetailsController.text,
         "brand": _selectedBrand,
         "category": _selectedCategory,
@@ -780,7 +876,7 @@ class _AddPageState extends State<AddPage> {
 
       final docRef = await _dbService.addProduct(newProduct);
 
-      await _dbService.addProductName(newProduct['name'] ?? "no name");
+      await _dbService.addProductName(newProduct['name'] as String? ?? "no name");
 
       setState(() {
         final product = {...newProduct, 'id': docRef.id};
@@ -936,11 +1032,15 @@ class _AddPageState extends State<AddPage> {
     _addNameController.dispose();
     _addPriceController.dispose();
     _addDeliveryFeeController.dispose();
+    _addFreeCoinController.dispose();
+    _addSizeController.dispose();
     _addDetailsController.dispose();
     _addVideoController.dispose();
     _editNameController.dispose();
     _editPriceController.dispose();
     _editDeliveryFeeController.dispose();
+    _editFreeCoinController.dispose();
+    _editSizeController.dispose();
     _editDetailsController.dispose();
     _editVideoController.dispose();
     _searchController.dispose();

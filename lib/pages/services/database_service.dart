@@ -143,6 +143,9 @@ class DatabaseService {
             "brand": map['brand']?.toString() ?? 'Others',
             "category": map['category']?.toString() ?? 'Others',
             "deliveryFee": map['deliveryFee']?.toString() ?? '0',
+            "freeCoin": int.tryParse(map['freeCoin']?.toString() ?? '0') ?? 0,
+            "size": map['size']?.toString() ?? '',
+            "stock": map['stock']?.toString() ?? 'Available',
             "clicked": map['clicked'] ?? 0,
             "image5": normalizeUrl(thumbImage),
             "image20": normalizeUrl(primaryImage),
@@ -181,6 +184,9 @@ class DatabaseService {
           "brand": data['brand']?.toString() ?? 'Others',
           "category": data['category']?.toString() ?? 'Others',
           "deliveryFee": data['deliveryFee']?.toString() ?? '0',
+          "freeCoin": int.tryParse(data['freeCoin']?.toString() ?? '0') ?? 0,
+          "size": data['size']?.toString() ?? '',
+          "stock": data['stock']?.toString() ?? 'Available',
           "clicked": data['clicked'] ?? 0,
           "image5": data['image5']?.toString() ?? data['imageUrl']?.toString() ?? data['image_url']?.toString() ?? '',
           "image20": data['image20']?.toString() ?? data['imageUrl']?.toString() ?? data['image_url']?.toString() ?? '',
@@ -230,7 +236,7 @@ class DatabaseService {
 
   Future<void> updateProduct(String id, Map<String, dynamic> data) async {
     try {
-      final apiData = Map<String, dynamic>.from(data);
+      final apiData = _sanitizeForApi(data);
       if (data.containsKey('image20')) {
         apiData['image'] = data['image20'];
         apiData['imageUrl'] = data['image20'];
@@ -256,6 +262,39 @@ class DatabaseService {
     }
   }
 
+  Future<void> addToFlashSell(String id, Map<String, dynamic> data) async {
+    // 1. Update main product (API + Firestore)
+    await updateProduct(id, data);
+
+    // 2. Add to flash_sell_products collection
+    // We fetch the full product data first to ensure we have everything in the new collection
+    try {
+      final doc = await _db.collection('products').doc(id).get();
+      if (doc.exists) {
+        final fullData = doc.data()!;
+        await _db.collection('flash_sell_products').doc(id).set({
+          ...fullData,
+          ...data,
+          "updatedAt": FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      print("Error adding to flash_sell_products: $e");
+    }
+  }
+
+  Future<void> removeFromFlashSell(String id, Map<String, dynamic> data) async {
+    // 1. Update main product (API + Firestore)
+    await updateProduct(id, data);
+
+    // 2. Remove from flash_sell_products collection
+    try {
+      await _db.collection('flash_sell_products').doc(id).delete();
+    } catch (e) {
+      print("Error removing from flash_sell_products: $e");
+    }
+  }
+
   Future<void> deleteProduct(String id) async {
     try {
       final response = await http.delete(
@@ -272,7 +311,7 @@ class DatabaseService {
 
   Future<dynamic> addProduct(Map<String, dynamic> data) async {
     try {
-      final apiData = Map<String, dynamic>.from(data);
+      final apiData = _sanitizeForApi(data);
       if (data.containsKey('image20')) {
         apiData['image'] = data['image20'];
         apiData['imageUrl'] = data['image20'];
@@ -308,6 +347,12 @@ class DatabaseService {
         "clicked": 0,
       });
     }
+  }
+
+  Map<String, dynamic> _sanitizeForApi(Map<String, dynamic> data) {
+    final Map<String, dynamic> sanitized = Map<String, dynamic>.from(data);
+    sanitized.removeWhere((key, value) => value is FieldValue || value is Timestamp);
+    return sanitized;
   }
 
   Future<void> _updateNamesDocument(List<String> names) async {
