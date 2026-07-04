@@ -19,53 +19,99 @@ class _AddPageState extends State<AddPage> {
   List<Map<String, dynamic>> products = [];
   List<Map<String, dynamic>> filteredProducts = [];
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  int _currentPage = 1;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
 
   final List<String> brands = [
     'Adidas',
     'Nike',
     'Puma',
+    'Dadu',
+    'Mizuno',
+    'Others',
+  ];
+
+  final List<String> categories = [
+    'Boots Master Grade',
+    'Boots Master Grade Copy',
+    'Boots 4 Grade',
+    'Boots China Copy',
+    'Boots Turf',
     'Gloves',
-    'Other_boots',
     'Jersey',
     'Pant',
-    'Dadu',
-    'Bundle',
+    'Bag',
+    'Safe Guard',
+    'Socks',
     'Combo Pack',
     'Others',
-
   ];
 
   final TextEditingController _addNameController = TextEditingController();
   final TextEditingController _addPriceController = TextEditingController();
+  final TextEditingController _addDeliveryFeeController = TextEditingController();
+  final TextEditingController _addFreeCoinController = TextEditingController();
+  final TextEditingController _addSizeController = TextEditingController();
   final TextEditingController _addDetailsController = TextEditingController();
   final TextEditingController _addVideoController = TextEditingController();
   XFile? _pickedImage;
+  XFile? _pickedImage2;
+  XFile? _pickedImage3;
   String? _addErrorMessage;
   String _selectedBrand = 'Adidas';
+  String _selectedCategory = 'Others';
+  String _selectedStock = 'Available';
   bool _isUploading = false;
 
   late TextEditingController _editNameController;
   late TextEditingController _editPriceController;
+  late TextEditingController _editDeliveryFeeController;
+  late TextEditingController _editFreeCoinController;
+  late TextEditingController _editSizeController;
   late TextEditingController _editDetailsController;
   late TextEditingController _editVideoController;
   late String _editSelectedBrand;
+  late String _editSelectedCategory;
+  late String _editSelectedStock;
   String? _editErrorMessage;
   Map<String, dynamic>? _editingProduct;
+  XFile? _editPickedImage;
+  XFile? _editPickedImage2;
+  XFile? _editPickedImage3;
+  bool _isEditing = false;
 
   @override
   void initState() {
     super.initState();
     _loadProducts();
     _initializeEditControllers();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500 &&
+        !_isLoadingMore &&
+        _hasMore &&
+        _searchController.text.isEmpty) {
+      _loadMoreProducts();
+    }
   }
 
   void _initializeEditControllers() {
     _editNameController = TextEditingController();
     _editPriceController = TextEditingController();
+    _editDeliveryFeeController = TextEditingController();
+    _editFreeCoinController = TextEditingController();
+    _editSizeController = TextEditingController();
     _editDetailsController = TextEditingController();
     _editVideoController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
     _editSelectedBrand = 'Adidas';
+    _editSelectedCategory = 'Others';
+    _editSelectedStock = 'Available';
   }
 
   void _onSearchChanged() {
@@ -112,14 +158,55 @@ class _AddPageState extends State<AddPage> {
 
 
   Future<void> _loadProducts() async {
+    setState(() {
+      _currentPage = 1;
+      _hasMore = true;
+    });
     try {
-      final loadedProducts = await _dbService.getProducts();
+      final loadedProducts = await _dbService.getProducts(page: _currentPage);
       setState(() {
         products = loadedProducts;
         filteredProducts = loadedProducts;
+        if (loadedProducts.length < 20) {
+          _hasMore = false;
+        }
       });
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
+    }
+  }
+
+  Future<void> _loadMoreProducts() async {
+    if (_isLoadingMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final nextPage = _currentPage + 1;
+      final loadedProducts = await _dbService.getProducts(page: nextPage);
+
+      setState(() {
+        if (loadedProducts.isEmpty) {
+          _hasMore = false;
+        } else {
+          products.addAll(loadedProducts);
+          _currentPage = nextPage;
+          if (loadedProducts.length < 20) {
+            _hasMore = false;
+          }
+          if (_searchController.text.isEmpty) {
+            filteredProducts = List.from(products);
+          }
+        }
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingMore = false;
+      });
+      _showSnackBar("Failed to load more products: ${e.toString()}");
     }
   }
 
@@ -134,102 +221,214 @@ class _AddPageState extends State<AddPage> {
     _editingProduct = product;
     _editNameController.text = _editingProduct!['name'];
     _editPriceController.text = _editingProduct!['price'];
+    _editDeliveryFeeController.text = _editingProduct!['deliveryFee'] ?? '0';
+    _editFreeCoinController.text = _editingProduct!['freeCoin']?.toString() ?? '0';
+    _editSizeController.text = _editingProduct!['size'] ?? '';
     _editDetailsController.text = _editingProduct!['details'];
     _editVideoController.text = _editingProduct!['videoLink'] ?? '';
-    _editSelectedBrand = _editingProduct!['brand'] ?? 'Others';
+    _editSelectedBrand = brands.contains(_editingProduct!['brand']) ? _editingProduct!['brand'] : 'Others';
+    _editSelectedCategory = categories.contains(_editingProduct!['category']) ? _editingProduct!['category'] : 'Others';
+    _editSelectedStock = ['Available', 'Not Available'].contains(_editingProduct!['stock']) ? _editingProduct!['stock'] : 'Available';
     _editErrorMessage = null;
+    _editPickedImage = null;
+    _editPickedImage2 = null;
+    _editPickedImage3 = null;
 
     showDialog(context: context, builder: (context) => _buildEditDialog());
   }
 
   Widget _buildEditDialog() {
-
-    return AlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text("Edit Product"),
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.of(context).pop(),
+    return StatefulBuilder(
+      builder: (context, setDialogState) {
+        return AlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Edit Product"),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
           ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_editErrorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  _editErrorMessage!,
-                  style: const TextStyle(color: Colors.red),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_editErrorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      _editErrorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildEditImagePickerSlot(
+                        currentImageUrl: _editingProduct!['image20'] ?? _editingProduct!['image5'],
+                        newImage: _editPickedImage,
+                        label: "Primary",
+                        onTap: () async {
+                          final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                          if (image != null) {
+                            setDialogState(() => _editPickedImage = image);
+                            setState(() {}); // Still update parent state for the save logic
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      _buildEditImagePickerSlot(
+                        currentImageUrl: _editingProduct!['image2'],
+                        newImage: _editPickedImage2,
+                        label: "Image 2",
+                        onTap: () async {
+                          final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                          if (image != null) {
+                            setDialogState(() => _editPickedImage2 = image);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      _buildEditImagePickerSlot(
+                        currentImageUrl: _editingProduct!['image3'],
+                        newImage: _editPickedImage3,
+                        label: "Image 3",
+                        onTap: () async {
+                          final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                          if (image != null) {
+                            setDialogState(() => _editPickedImage3 = image);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            TextField(
-              controller: _editNameController,
-              decoration: const InputDecoration(
-                labelText: "Name",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _editPriceController,
-              decoration: const InputDecoration(
-                labelText: "Price",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _editDetailsController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: "Details",
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _editVideoController,
-              decoration: const InputDecoration(
-                labelText: "Video link",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _editSelectedBrand,
-              items:
-                  brands.map((brand) {
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _editNameController,
+                  decoration: const InputDecoration(
+                    labelText: "Name",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editPriceController,
+                  decoration: const InputDecoration(
+                    labelText: "Price",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editDeliveryFeeController,
+                  decoration: const InputDecoration(
+                    labelText: "Delivery Fee",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editFreeCoinController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Free Coin",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editSizeController,
+                  decoration: const InputDecoration(
+                    labelText: "Size",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editDetailsController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: "Details",
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editVideoController,
+                  decoration: const InputDecoration(
+                    labelText: "Video link",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _editSelectedBrand,
+                  items: brands.map((brand) {
                     return DropdownMenuItem(value: brand, child: Text(brand));
                   }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _editSelectedBrand = value!;
-                });
-              },
-              decoration: const InputDecoration(
-                labelText: "Brand/Category",
-                border: OutlineInputBorder(),
-              ),
+                  onChanged: (value) {
+                    setDialogState(() => _editSelectedBrand = value!);
+                    setState(() {});
+                  },
+                  decoration: const InputDecoration(
+                    labelText: "Brand",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _editSelectedCategory,
+                  items: categories.map((cat) {
+                    return DropdownMenuItem(value: cat, child: Text(cat));
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => _editSelectedCategory = value!);
+                    setState(() {});
+                  },
+                  decoration: const InputDecoration(
+                    labelText: "Category",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _editSelectedStock,
+                  items: ['Available', 'Not Available'].map((s) {
+                    return DropdownMenuItem(value: s, child: Text(s));
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => _editSelectedStock = value!);
+                    setState(() {});
+                  },
+                  decoration: const InputDecoration(
+                    labelText: "Stock",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: _isEditing ? null : () => _saveEditedProduct(),
+              child: _isEditing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text("Save"),
             ),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text("Cancel"),
-        ),
-        ElevatedButton(
-          onPressed: () => _saveEditedProduct(),
-          child: const Text("Save"),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -242,31 +441,89 @@ class _AddPageState extends State<AddPage> {
       return;
     }
 
+    setState(() {
+      _isEditing = true;
+      _editErrorMessage = null;
+    });
+
     try {
       final oldName = _editingProduct!['name'];
       final productId = _editingProduct!['id'];
+
+      String img5 = _editingProduct!['image5'] ?? '';
+      String img20 = _editingProduct!['image20'] ?? '';
+      String img2 = _editingProduct!['image2'] ?? '';
+      String img3 = _editingProduct!['image3'] ?? '';
+
+      if (_editPickedImage != null) {
+        try {
+          if (img5.isNotEmpty) await _imageService.deleteImage(img5);
+          if (img20.isNotEmpty) await _imageService.deleteImage(img20);
+        } catch (e) {
+          debugPrint("Failed to delete old primary images: $e");
+        }
+        final urls = await _imageService.uploadCompressedImages(File(_editPickedImage!.path));
+        img5 = urls['url5']!;
+        img20 = urls['url20']!;
+      }
+
+      if (_editPickedImage2 != null) {
+        try {
+          if (img2.isNotEmpty) await _imageService.deleteImage(img2);
+        } catch (e) {
+          debugPrint("Failed to delete old image2: $e");
+        }
+        img2 = await _imageService.uploadAdditionalImage(File(_editPickedImage2!.path));
+      }
+
+      if (_editPickedImage3 != null) {
+        try {
+          if (img3.isNotEmpty) await _imageService.deleteImage(img3);
+        } catch (e) {
+          debugPrint("Failed to delete old image3: $e");
+        }
+        img3 = await _imageService.uploadAdditionalImage(File(_editPickedImage3!.path));
+      }
 
       final updatedProduct = {
         ..._editingProduct!,
         "name": _editNameController.text,
         "price": _editPriceController.text,
+        "deliveryFee": _editDeliveryFeeController.text,
+        "freeCoin": int.tryParse(_editFreeCoinController.text) ?? 0,
+        "size": _editSizeController.text,
+        "stock": _editSelectedStock,
         "details": _editDetailsController.text,
         "brand": _editSelectedBrand,
+        "category": _editSelectedCategory,
         "videoLink": _editVideoController.text,
+        "image5": img5,
+        "image20": img20,
+        "image2": img2,
+        "image3": img3,
         "updatedAt": FieldValue.serverTimestamp(),
       };
 
       await _dbService.updateProduct(productId, {
         'name': updatedProduct['name'],
         'price': updatedProduct['price'],
+        'deliveryFee': updatedProduct['deliveryFee'],
+        'freeCoin': updatedProduct['freeCoin'],
+        'size': updatedProduct['size'],
+        'stock': updatedProduct['stock'],
         'details': updatedProduct['details'],
         'brand': updatedProduct['brand'],
+        'category': updatedProduct['category'],
         'videoLink': updatedProduct['videoLink'],
+        'image5': updatedProduct['image5'],
+        'image20': updatedProduct['image20'],
+        'image2': updatedProduct['image2'],
+        'image3': updatedProduct['image3'],
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (oldName != updatedProduct['name']) {
-        await _dbService.updateProductName(oldName, updatedProduct['name']);
+        await _dbService.updateProductName(oldName as String, updatedProduct['name'] as String);
       }
 
       setState(() {
@@ -279,8 +536,15 @@ class _AddPageState extends State<AddPage> {
       Navigator.pop(context);
     } catch (e) {
       setState(() {
+        _isEditing = false;
         _editErrorMessage = "Update failed: ${e.toString()}";
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+        });
+      }
     }
   }
 
@@ -306,11 +570,15 @@ class _AddPageState extends State<AddPage> {
                 onPressed: () async {
                   try {
                     final imageService = ImageUploadService();
-                    String img5 = product['image5'];
-                    String img20 = product['image20'];
+                    String img5 = product['image5'] ?? '';
+                    String img20 = product['image20'] ?? '';
+                    String img2 = product['image2'] ?? '';
+                    String img3 = product['image3'] ?? '';
 
-                    await imageService.deleteImage(img5);
-                    await imageService.deleteImage(img20);
+                    if (img5.isNotEmpty) await imageService.deleteImage(img5);
+                    if (img20.isNotEmpty) await imageService.deleteImage(img20);
+                    if (img2.isNotEmpty) await imageService.deleteImage(img2);
+                    if (img3.isNotEmpty) await imageService.deleteImage(img3);
 
                     await _dbService.deleteProduct(productId);
 
@@ -338,11 +606,18 @@ class _AddPageState extends State<AddPage> {
   void _showAddProductSheet() {
     _addNameController.clear();
     _addPriceController.clear();
+    _addDeliveryFeeController.clear();
+    _addFreeCoinController.clear();
+    _addSizeController.clear();
     _addDetailsController.clear();
     _addVideoController.clear();
     _pickedImage = null;
+    _pickedImage2 = null;
+    _pickedImage3 = null;
     _addErrorMessage = null;
     _selectedBrand = 'Adidas';
+    _selectedCategory = 'Others';
+    _selectedStock = 'Available';
     _isUploading = false;
 
     showModalBottomSheet(
@@ -382,27 +657,38 @@ class _AddPageState extends State<AddPage> {
                     textAlign: TextAlign.center,
                   ),
                 ),
-              _pickedImage != null
-                  ? Image.file(
-                    File(_pickedImage!.path),
-                    height: 200,
-                    fit: BoxFit.cover,
-                  )
-                  : const Icon(Icons.image, size: 100, color: Colors.grey),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final image = await ImagePicker().pickImage(
-                    source: ImageSource.gallery,
-                  );
-                  if (image != null) {
-                    setState(() {
-                      _pickedImage = image;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text("Pick Image from Gallery"),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildImagePickerSlot(
+                      image: _pickedImage,
+                      label: "Primary *",
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                        if (image != null) setState(() => _pickedImage = image);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    _buildImagePickerSlot(
+                      image: _pickedImage2,
+                      label: "Image 2",
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                        if (image != null) setState(() => _pickedImage2 = image);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    _buildImagePickerSlot(
+                      image: _pickedImage3,
+                      label: "Image 3",
+                      onTap: () async {
+                        final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+                        if (image != null) setState(() => _pickedImage3 = image);
+                      },
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -417,6 +703,31 @@ class _AddPageState extends State<AddPage> {
                 controller: _addPriceController,
                 decoration: const InputDecoration(
                   labelText: "Price",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addDeliveryFeeController,
+                decoration: const InputDecoration(
+                  labelText: "Delivery Fee",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addFreeCoinController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Free Coin",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addSizeController,
+                decoration: const InputDecoration(
+                  labelText: "Size",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -453,7 +764,40 @@ class _AddPageState extends State<AddPage> {
                   });
                 },
                 decoration: const InputDecoration(
-                  labelText: "Brand/Category",
+                  labelText: "Brand",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                items:
+                    categories.map((cat) {
+                      return DropdownMenuItem(value: cat, child: Text(cat));
+                    }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategory = value!;
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: "Category",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedStock,
+                items: ['Available', 'Not Available'].map((s) {
+                  return DropdownMenuItem(value: s, child: Text(s));
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedStock = value!;
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: "Stock",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -503,22 +847,39 @@ class _AddPageState extends State<AddPage> {
       final imageFile = File(_pickedImage!.path);
       final urls = await _imageService.uploadCompressedImages(imageFile);
 
+      String? url2;
+      if (_pickedImage2 != null) {
+        url2 = await _imageService.uploadAdditionalImage(File(_pickedImage2!.path));
+      }
+
+      String? url3;
+      if (_pickedImage3 != null) {
+        url3 = await _imageService.uploadAdditionalImage(File(_pickedImage3!.path));
+      }
+
       final newProduct = {
         "name": _addNameController.text,
         "price": _addPriceController.text,
+        "deliveryFee": _addDeliveryFeeController.text,
+        "freeCoin": int.tryParse(_addFreeCoinController.text) ?? 0,
+        "size": _addSizeController.text,
+        "stock": _selectedStock,
         "details": _addDetailsController.text,
         "brand": _selectedBrand,
+        "category": _selectedCategory,
         "videoLink": _addVideoController.text,
         "image5": urls['url5'],
         "image20": urls['url20'],
+        "image2": url2 ?? '',
+        "image3": url3 ?? '',
       };
 
       final docRef = await _dbService.addProduct(newProduct);
 
-      await _dbService.addProductName(newProduct['name'] ?? "no name");
+      await _dbService.addProductName(newProduct['name'] as String? ?? "no name");
 
       setState(() {
-        final product = {...newProduct, 'id': docRef.id, 'clicked': 0};
+        final product = {...newProduct, 'id': docRef.id};
         products.insert(0, product);
         _searchProducts(_searchController.text);
       });
@@ -533,6 +894,74 @@ class _AddPageState extends State<AddPage> {
         _isUploading = false;
       });
     }
+  }
+
+  Widget _buildImagePickerSlot({
+    XFile? image,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child:
+                image != null
+                    ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(File(image.path), fit: BoxFit.cover),
+                    )
+                    : const Icon(Icons.add_a_photo, color: Colors.grey),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditImagePickerSlot({
+    String? currentImageUrl,
+    XFile? newImage,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child:
+                newImage != null
+                    ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(File(newImage.path), fit: BoxFit.cover),
+                    )
+                    : (currentImageUrl != null && currentImageUrl.isNotEmpty)
+                    ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(currentImageUrl, fit: BoxFit.cover),
+                    )
+                    : const Icon(Icons.add_a_photo, color: Colors.grey),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -568,13 +997,27 @@ class _AddPageState extends State<AddPage> {
                     : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: ListView.builder(
-                        itemCount: filteredProducts.length,
-                        itemBuilder:
-                            (context, index) => ProductCard(
+                        controller: _scrollController,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        cacheExtent: 500,
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: filteredProducts.length + (_isLoadingMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index < filteredProducts.length) {
+                            return ProductCard(
                               product: filteredProducts[index],
                               onEdit: () => _showEditDialog(filteredProducts[index]),
                               onDelete: () => _deleteProduct(filteredProducts[index]),
-                            ),
+                            );
+                          } else {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                        },
                       ),
                     ),
           ),
@@ -588,13 +1031,20 @@ class _AddPageState extends State<AddPage> {
   void dispose() {
     _addNameController.dispose();
     _addPriceController.dispose();
+    _addDeliveryFeeController.dispose();
+    _addFreeCoinController.dispose();
+    _addSizeController.dispose();
     _addDetailsController.dispose();
     _addVideoController.dispose();
     _editNameController.dispose();
     _editPriceController.dispose();
+    _editDeliveryFeeController.dispose();
+    _editFreeCoinController.dispose();
+    _editSizeController.dispose();
     _editDetailsController.dispose();
     _editVideoController.dispose();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 

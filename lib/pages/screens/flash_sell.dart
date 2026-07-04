@@ -18,6 +18,11 @@ class _FlashSellState extends State<FlashSell> {
   DateTime? _flashSellTimer;
   bool _loadingTimer = false;
 
+  final ScrollController _scrollController = ScrollController();
+  int _currentPage = 1;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
   String formatRemainingTime(DateTime? endTime) {
     if (endTime == null) return "No timer set";
 
@@ -36,6 +41,7 @@ class _FlashSellState extends State<FlashSell> {
     super.initState();
     _loadFlashSellTimer();
     _loadProducts();
+    _scrollController.addListener(_onScroll);
 
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -44,17 +50,30 @@ class _FlashSellState extends State<FlashSell> {
     });
   }
 
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 500 &&
+        !_isLoadingMore &&
+        _hasMore) {
+      _loadMoreProducts();
+    }
+  }
+
   @override
   void dispose() {
     if (_timer.isActive) {
       _timer.cancel();
     }
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadProducts() async {
+    setState(() {
+      _currentPage = 1;
+      _hasMore = true;
+    });
     try {
-      final loadedProducts = await _dbService.getProducts();
+      final loadedProducts = await _dbService.getProducts(page: _currentPage);
       loadedProducts.sort((a, b) {
         final isAFlash = a['flashSell'] == true;
         final isBFlash = b['flashSell'] == true;
@@ -65,9 +84,55 @@ class _FlashSellState extends State<FlashSell> {
         return 0;
       });
       if (!mounted) return;
-      setState(() => products = loadedProducts);
+      setState(() {
+        products = loadedProducts;
+        if (loadedProducts.length < 20) {
+          _hasMore = false;
+        }
+      });
     } catch (e) {
       _showSnackBar("Failed to load products: ${e.toString()}");
+    }
+  }
+
+  Future<void> _loadMoreProducts() async {
+    if (_isLoadingMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final nextPage = _currentPage + 1;
+      final loadedProducts = await _dbService.getProducts(page: nextPage);
+
+      setState(() {
+        if (loadedProducts.isEmpty) {
+          _hasMore = false;
+        } else {
+          products.addAll(loadedProducts);
+          // Optional: re-sort if needed, but might be jarring during scroll
+          /*
+          products.sort((a, b) {
+            final isAFlash = a['flashSell'] == true;
+            final isBFlash = b['flashSell'] == true;
+            if (isAFlash && !isBFlash) return -1;
+            if (!isAFlash && isBFlash) return 1;
+            return 0;
+          });
+          */
+          _currentPage = nextPage;
+          if (loadedProducts.length < 20) {
+            _hasMore = false;
+          }
+        }
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingMore = false;
+      });
+      _showSnackBar("Failed to load more products: ${e.toString()}");
     }
   }
 
@@ -212,16 +277,16 @@ class _FlashSellState extends State<FlashSell> {
 
     try {
       if (isFlash) {
-        await _dbService.updateProduct(productId, {
+        await _dbService.removeFromFlashSell(productId, {
           "flashSell": false,
           "price": product["oldPrice"] ?? product["price"],
           "oldPrice": FieldValue.delete(),
           "flash-expire": FieldValue.delete(),
         });
       } else {
-        await _dbService.updateProduct(productId, {
+        await _dbService.addToFlashSell(productId, {
           "flashSell": true,
-          "price": product["newFlashPrice"],
+          "price": product["newFlashPrice"] ?? product["price"],
           "oldPrice": product["price"],
           "flash-expire": FieldValue.delete(),
         });
@@ -303,7 +368,7 @@ class _FlashSellState extends State<FlashSell> {
                 final String oldPrice = product["price"];
 
                 try {
-                  await _dbService.updateProduct(productId, {
+                  await _dbService.addToFlashSell(productId, {
                     "flashSell": true,
                     "price": newPrice,
                     "oldPrice": oldPrice,
@@ -414,103 +479,114 @@ class _FlashSellState extends State<FlashSell> {
             SizedBox(height: 12),
             Expanded(
               child: ListView.builder(
-                itemCount: products.length,
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                itemCount: products.length + (_isLoadingMore ? 1 : 0),
                 itemBuilder: (context, index) {
-                  final product = products[index];
+                  if (index < products.length) {
+                    final product = products[index];
 
-                  final String countdown =
-                      product["flashSell"] == true
-                          ? remainingTime
-                          : "Not in flash sell";
+                    final String countdown =
+                        product["flashSell"] == true
+                            ? remainingTime
+                            : "Not in flash sell";
 
-                  return Card(
-                    elevation: 4,
-                    margin: EdgeInsets.all(10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.network(
-                                  product["image5"] ?? "",
-                                  height: 120,
-                                  width: 120,
-                                  fit: BoxFit.cover,
-                                  errorBuilder:
-                                      (_, __, ___) =>
-                                          Icon(Icons.broken_image, size: 80),
-                                ),
-                              ),
-                              SizedBox(width: 12),
-
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      product["name"] ?? "No name",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    SizedBox(height: 5),
-
-                                    Text(
-                                      "Price: ${product["price"]}",
-                                      style: TextStyle(fontSize: 16),
-                                    ),
-
-                                    SizedBox(height: 6),
-
-                                    Text(
-                                      "Remaining: $countdown",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color:
-                                            countdown == "Expired"
-                                                ? Colors.red
-                                                : Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              ElevatedButton(
-                                onPressed:
-                                    product["flashSell"] == true
-                                        ? () => _confirmFlashAction(product)
-                                        : _flashSellTimer == null
-                                        ? () => _showSnackBar(
-                                          "Set the flash sell timer first.",
-                                        )
-                                        : () => showFlashPriceDialog(product),
-                                child: Text(
-                                  product["flashSell"] == true
-                                      ? "Remove from Flash Sell"
-                                      : "Flash Sell",
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                    return Card(
+                      elevation: 4,
+                      margin: EdgeInsets.all(10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ),
-                  );
+                      child: Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    product["image5"] ?? "",
+                                    height: 120,
+                                    width: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (_, __, ___) =>
+                                            Icon(Icons.broken_image, size: 80),
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product["name"] ?? "No name",
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      SizedBox(height: 5),
+
+                                      Text(
+                                        "Price: ${product["price"]}",
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+
+                                      SizedBox(height: 6),
+
+                                      Text(
+                                        "Remaining: $countdown",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              countdown == "Expired"
+                                                  ? Colors.red
+                                                  : Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                ElevatedButton(
+                                  onPressed:
+                                      product["flashSell"] == true
+                                          ? () => _confirmFlashAction(product)
+                                          : _flashSellTimer == null
+                                          ? () => _showSnackBar(
+                                            "Set the flash sell timer first.",
+                                          )
+                                          : () => showFlashPriceDialog(product),
+                                  child: Text(
+                                    product["flashSell"] == true
+                                        ? "Remove from Flash Sell"
+                                        : "Flash Sell",
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  } else {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
                 },
               ),
             ),

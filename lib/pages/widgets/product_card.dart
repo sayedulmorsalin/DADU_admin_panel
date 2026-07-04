@@ -13,8 +13,37 @@ class ProductCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  Widget _buildImage(String url) {
+    if (url.isEmpty) return const Icon(Icons.image, size: 50, color: Colors.grey);
+    
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      errorWidget: (context, url, error) {
+        // Fallback to image5 if image20 failed
+        if (product['image5'] != null && product['image5'] != url && product['image5'].isNotEmpty) {
+          return CachedNetworkImage(
+            imageUrl: product['image5'],
+            fit: BoxFit.cover,
+            errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+          );
+        }
+        return const Icon(Icons.broken_image);
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -29,14 +58,10 @@ class ProductCard extends StatelessWidget {
               child: SizedBox(
                 width: 120,
                 height: 120,
-                child: CachedNetworkImage(
-                  imageUrl: product['image20'] ?? '',
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
-                  errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
-                ),
+                child: _buildImage(product['image20'] ?? product['image5'] ?? ''),
               ),
             ),
+
 
             const SizedBox(width: 12),
 
@@ -71,10 +96,11 @@ class ProductCard extends StatelessWidget {
                   const SizedBox(height: 6),
 
                   Text(
-                    'Brand: ${product['brand'] ?? ''}',
+                    'Brand: ${product['brand'] ?? ''} | Category: ${product['category'] ?? ''}',
                     style: TextStyle(
                       color: Colors.blue[700],
                       fontWeight: FontWeight.w500,
+                      fontSize: 12,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -86,19 +112,6 @@ class ProductCard extends StatelessWidget {
                     product['details'] ?? '',
                     style: const TextStyle(fontSize: 14),
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-
-                  const SizedBox(height: 6),
-
-
-                  Text(
-                    'Clicks: ${product['clicked'] ?? 0}',
-                    style: const TextStyle(
-                      color: Colors.purple,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
 
