@@ -197,7 +197,7 @@ class _VerifyState extends State<Verify> {
       'Point in account: ${_formatValue(order['deliveryPoints'])}',
     );
     buffer.writeln(
-      'Point in use: ${_formatValue(_safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']))}',
+      'Point in use: ${_formatValue(order['deliveryPointsUsed'])}',
     );
     buffer.writeln(
       'Request for free delivery: ${_formatValue(order['freeDeliveryUsed'])}',
@@ -304,11 +304,21 @@ class _VerifyState extends State<Verify> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    buildSafeText("Order No", index + 1,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                            color: Colors.red)),
                                     buildSafeText("Customer Name", customerName,
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 18)),
                                     buildSafeText("Phone", phone),
+                                    buildSafeText("Item Count", items.length,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: Colors.blue)),
                                   ],
                                 ),
                                 Icon(isExpanded
@@ -361,9 +371,9 @@ class _VerifyState extends State<Verify> {
                               ],
                             ),
                             const SizedBox(height: 10),
-                            const Text(
-                              "Items:",
-                              style: TextStyle(
+                            Text(
+                              "Items: (${items.length})",
+                              style: const TextStyle(
                                 decoration: TextDecoration.none,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -440,8 +450,7 @@ class _VerifyState extends State<Verify> {
                             ),
                             buildSafeText(
                               "Point in use",
-                              _safeNum(order['baseDeliveryCharge']) -
-                                  _safeNum(order['deliveryCharge']),
+                              order['deliveryPointsUsed'],
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,

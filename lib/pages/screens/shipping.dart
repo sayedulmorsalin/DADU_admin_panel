@@ -371,6 +371,15 @@ class _ShippingState extends State<Shipping> {
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                       buildSafeText(
+                                                        "Order No",
+                                                        index + 1,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 20,
+                                                          color: Colors.red,
+                                                        ),
+                                                      ),
+                                                      buildSafeText(
                                                         "Customer",
                                                         order['customerName'] ??
                                                             order['user_name'],
@@ -386,6 +395,15 @@ class _ShippingState extends State<Shipping> {
                                                         style: const TextStyle(
                                                           fontWeight: FontWeight.bold,
                                                           fontSize: 20,
+                                                        ),
+                                                      ),
+                                                      buildSafeText(
+                                                        "Item Count",
+                                                        items.length,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 16,
+                                                          color: Colors.blue,
                                                         ),
                                                       ),
                                                     ],
@@ -430,9 +448,9 @@ class _ShippingState extends State<Shipping> {
                                               ),
 
                                               const SizedBox(height: 10),
-                                              const Text(
-                                                "Items:",
-                                                style: TextStyle(
+                                              Text(
+                                                "Items: (${items.length})",
+                                                style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 16,
                                                 ),
@@ -500,11 +518,33 @@ class _ShippingState extends State<Shipping> {
 
                                               const SizedBox(height: 10),
                                               buildSafeText(
+                                                "Subtotal",
+                                                order['subtotal'],
+                                              ),
+                                              buildSafeText(
                                                 "Total",
                                                 order['total'],
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 16,
+                                                ),
+                                              ),
+                                              buildSafeText(
+                                                "Delivery fee",
+                                                order['deliveryCharge'],
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18,
+                                                  color: Colors.blue,
+                                                ),
+                                              ),
+                                              buildSafeText(
+                                                "Point in use",
+                                                order['deliveryPointsUsed'],
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18,
+                                                  color: Colors.blue,
                                                 ),
                                               ),
                                               buildSafeText(
@@ -601,6 +641,7 @@ class _ShippingState extends State<Shipping> {
   ) async {
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
+      final orderLabel = _getNotificationOrderLabel(order);
 
       // Remove order from to_ship array
       await _databaseService.removeItemsFromShip(userEmail: userEmail);
@@ -609,6 +650,12 @@ class _ShippingState extends State<Shipping> {
       if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
         deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Canceled',
+        body: 'Your order $orderLabel has been canceled. Please contact support if you have any questions.',
+      );
 
       // Update UI
       setState(() {
@@ -648,6 +695,16 @@ class _ShippingState extends State<Shipping> {
       String fullAddress = order['address'] ?? '';
       if (order['thana'] != null) fullAddress += ', ${order['thana']}';
       if (order['district'] != null) fullAddress += ', ${order['district']}';
+
+      if (fullAddress.length < 10) {
+        Navigator.pop(context);
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Address too short: "$fullAddress". Must be at least 10 characters for Steadfast.'),
+          ),
+        );
+        return;
+      }
 
       if (fullAddress.length > 250) {
         fullAddress = fullAddress.substring(0, 250);
@@ -693,8 +750,9 @@ class _ShippingState extends State<Shipping> {
         recipientName = recipientName.substring(0, 100);
       }
 
+      String trackingCode = '';
       try {
-        await steadfastService.createOrder(
+        final result = await steadfastService.createOrder(
           invoice: invoice,
           recipientName: recipientName,
           recipientPhone: phone,
@@ -702,11 +760,17 @@ class _ShippingState extends State<Shipping> {
           codAmount: codAmount,
           note: order['note'] ?? 'Deliver as soon as possible',
         );
+        
+        // Extract tracking info if available
+        if (result['order'] != null && result['order']['tracking_code'] != null) {
+          trackingCode = result['order']['tracking_code'].toString();
+        } else if (result['tracking_code'] != null) {
+          trackingCode = result['tracking_code'].toString();
+        }
       } catch (e) {
-        print("Steadfast Error: $e");
         Navigator.pop(context); // Close loading dialog
         _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(content: Text('Steadfast Error: $e. Order not processed.')),
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
         );
         return;
       }
@@ -720,7 +784,7 @@ class _ShippingState extends State<Shipping> {
         email: userEmail,
         title: 'Order Shipped',
         body:
-            'Your order $orderLabel has been shipped and is on its way to you!',
+            'Your order $orderLabel has been shipped! Tracking Code: $trackingCode',
       );
 
       Navigator.pop(context); // Close loading dialog
@@ -732,8 +796,15 @@ class _ShippingState extends State<Shipping> {
       });
 
       _scaffoldMessengerKey.currentState!.showSnackBar(
-        const SnackBar(
-          content: Text('Order marked as Shipped and sent to Steadfast'),
+        SnackBar(
+          content: Text('Order Shipped to Steadfast! Tracking: $trackingCode'),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Copy',
+            onPressed: () {
+              // You could add clipboard support here
+            },
+          ),
         ),
       );
     } catch (e) {

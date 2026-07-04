@@ -421,7 +421,7 @@ class _AddPageState extends State<AddPage> {
               child: const Text("Cancel"),
             ),
             ElevatedButton(
-              onPressed: _isEditing ? null : () => _saveEditedProduct(),
+              onPressed: _isEditing ? null : () => _saveEditedProduct(setDialogState),
               child: _isEditing
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text("Save"),
@@ -433,22 +433,28 @@ class _AddPageState extends State<AddPage> {
   }
 
 
-  void _saveEditedProduct() async {
+  Future<void> _saveEditedProduct(Function(void Function()) setDialogState) async {
     if (_editNameController.text.isEmpty || _editPriceController.text.isEmpty) {
-      setState(() {
+      setDialogState(() {
         _editErrorMessage = "Name and price are required";
       });
       return;
     }
 
-    setState(() {
+    setDialogState(() {
       _isEditing = true;
       _editErrorMessage = null;
     });
+    setState(() => _isEditing = true);
 
     try {
       final oldName = _editingProduct!['name'];
       final productId = _editingProduct!['id'];
+      
+      debugPrint("Saving product with ID: $productId");
+      if (productId == null || productId.toString().isEmpty) {
+        throw Exception("Product ID is missing");
+      }
 
       String img5 = _editingProduct!['image5'] ?? '';
       String img20 = _editingProduct!['image20'] ?? '';
@@ -456,6 +462,7 @@ class _AddPageState extends State<AddPage> {
       String img3 = _editingProduct!['image3'] ?? '';
 
       if (_editPickedImage != null) {
+        debugPrint("Uploading new primary image...");
         try {
           if (img5.isNotEmpty) await _imageService.deleteImage(img5);
           if (img20.isNotEmpty) await _imageService.deleteImage(img20);
@@ -468,6 +475,7 @@ class _AddPageState extends State<AddPage> {
       }
 
       if (_editPickedImage2 != null) {
+        debugPrint("Uploading new image 2...");
         try {
           if (img2.isNotEmpty) await _imageService.deleteImage(img2);
         } catch (e) {
@@ -477,6 +485,7 @@ class _AddPageState extends State<AddPage> {
       }
 
       if (_editPickedImage3 != null) {
+        debugPrint("Uploading new image 3...");
         try {
           if (img3.isNotEmpty) await _imageService.deleteImage(img3);
         } catch (e) {
@@ -485,65 +494,59 @@ class _AddPageState extends State<AddPage> {
         img3 = await _imageService.uploadAdditionalImage(File(_editPickedImage3!.path));
       }
 
-      final updatedProduct = {
-        ..._editingProduct!,
-        "name": _editNameController.text,
-        "price": _editPriceController.text,
-        "deliveryFee": _editDeliveryFeeController.text,
-        "freeCoin": int.tryParse(_editFreeCoinController.text) ?? 0,
-        "size": _editSizeController.text,
-        "stock": _editSelectedStock,
-        "details": _editDetailsController.text,
-        "brand": _editSelectedBrand,
-        "category": _editSelectedCategory,
-        "videoLink": _editVideoController.text,
-        "image5": img5,
-        "image20": img20,
-        "image2": img2,
-        "image3": img3,
-        "updatedAt": FieldValue.serverTimestamp(),
+      final updatePayload = {
+        'name': _editNameController.text,
+        'price': _editPriceController.text,
+        'deliveryFee': _editDeliveryFeeController.text,
+        'freeCoin': int.tryParse(_editFreeCoinController.text) ?? 0,
+        'size': _editSizeController.text,
+        'stock': _editSelectedStock,
+        'details': _editDetailsController.text,
+        'brand': _editSelectedBrand,
+        'category': _editSelectedCategory,
+        'videoLink': _editVideoController.text,
+        'image5': img5,
+        'image20': img20,
+        'image2': img2,
+        'image3': img3,
       };
+      
+      debugPrint("Calling DatabaseService.updateProduct...");
+      await _dbService.updateProduct(productId, updatePayload);
+      debugPrint("DatabaseService.updateProduct successful.");
 
-      await _dbService.updateProduct(productId, {
-        'name': updatedProduct['name'],
-        'price': updatedProduct['price'],
-        'deliveryFee': updatedProduct['deliveryFee'],
-        'freeCoin': updatedProduct['freeCoin'],
-        'size': updatedProduct['size'],
-        'stock': updatedProduct['stock'],
-        'details': updatedProduct['details'],
-        'brand': updatedProduct['brand'],
-        'category': updatedProduct['category'],
-        'videoLink': updatedProduct['videoLink'],
-        'image5': updatedProduct['image5'],
-        'image20': updatedProduct['image20'],
-        'image2': updatedProduct['image2'],
-        'image3': updatedProduct['image3'],
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (oldName != updatedProduct['name']) {
-        await _dbService.updateProductName(oldName as String, updatedProduct['name'] as String);
+      if (oldName != updatePayload['name']) {
+        await _dbService.updateProductName(oldName?.toString() ?? '', updatePayload['name']?.toString() ?? '');
       }
 
-      setState(() {
-        final index = products.indexWhere((p) => p['id'] == productId);
-        if (index != -1) {
-          products[index] = updatedProduct;
-        }
-        _searchProducts(_searchController.text);
-      });
-      Navigator.pop(context);
+      final updatedProduct = {
+        ..._editingProduct!,
+        ...updatePayload,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+
+      if (mounted) {
+        setState(() {
+          final index = products.indexWhere((p) => p['id'] == productId);
+          if (index != -1) {
+            products[index] = updatedProduct;
+          }
+          _searchProducts(_searchController.text);
+        });
+        Navigator.pop(context);
+        _showSnackBar("Product updated successfully!");
+      }
     } catch (e) {
-      setState(() {
+      debugPrint("Error in _saveEditedProduct: $e");
+      setDialogState(() {
         _isEditing = false;
         _editErrorMessage = "Update failed: ${e.toString()}";
       });
+      setState(() => _isEditing = false);
     } finally {
       if (mounted) {
-        setState(() {
-          _isEditing = false;
-        });
+        setDialogState(() => _isEditing = false);
+        setState(() => _isEditing = false);
       }
     }
   }

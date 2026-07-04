@@ -21,6 +21,16 @@ class SteadfastService {
       throw Exception('Steadfast API Key or Secret Key not found in .env');
     }
 
+    final Map<String, dynamic> requestBody = {
+      'invoice': invoice,
+      'recipient_name': recipientName,
+      'recipient_phone': recipientPhone,
+      'recipient_address': recipientAddress,
+      'cod_amount': codAmount.toInt(),
+      'note': note ?? '',
+      'item_description': itemDescription ?? 'Apps Product',
+    };
+
     final response = await http.post(
       Uri.parse('$_baseUrl/create_order'),
       headers: {
@@ -28,29 +38,32 @@ class SteadfastService {
         'Secret-Key': secretKey,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({
-        'invoice': invoice,
-        'recipient_name': recipientName,
-        'recipient_phone': recipientPhone,
-        'recipient_address': recipientAddress,
-        'cod_amount': codAmount,
-        'note': note ?? '',
-        'item_description': itemDescription ?? '',
-      }),
+      body: jsonEncode(requestBody),
     );
 
     dynamic responseData;
     try {
       responseData = jsonDecode(response.body);
     } catch (e) {
-      // If response is not JSON, it's likely a plain text error from the server
-      throw Exception(response.body.isNotEmpty ? response.body : 'Server returned an invalid response (not JSON)');
+      throw 'Server returned an invalid response. Please try again later.';
     }
 
     if (response.statusCode == 200) {
+      if (responseData is Map && responseData['status'] != null && responseData['status'] != 200) {
+        String error = responseData['errors']?.toString() ?? responseData['message']?.toString() ?? 'Unknown error';
+        throw 'Steadfast: $error';
+      }
       return responseData;
     } else {
-      throw Exception(responseData['message'] ?? 'Failed to create order in Steadfast');
+      String errorMessage = 'Failed to create order in Steadfast';
+      if (responseData is Map) {
+        if (responseData['message'] != null) {
+          errorMessage = responseData['message'];
+        } else if (responseData['errors'] != null) {
+          errorMessage = responseData['errors'].toString();
+        }
+      }
+      throw errorMessage;
     }
   }
 }
