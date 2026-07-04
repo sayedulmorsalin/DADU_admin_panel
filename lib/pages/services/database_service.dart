@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class _ApiDocRef {
+class ApiDocRef {
   final String id;
-  _ApiDocRef(this.id);
+  ApiDocRef(this.id);
 }
 
 class DatabaseService {
@@ -15,9 +15,10 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getProducts({int page = 1, int limit = 20}) async {
     try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl/products?page=$page&limit=$limit'))
-          .timeout(const Duration(seconds: 15));
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final url = '$_baseUrl/products?page=$page&limit=$limit&t=$timestamp';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      
       if (response.statusCode == 200) {
         final dynamic decoded = json.decode(response.body);
         List<dynamic> data = [];
@@ -25,115 +26,34 @@ class DatabaseService {
         if (decoded is List) {
           data = decoded;
         } else if (decoded is Map) {
-          if (decoded.containsKey('products') && decoded['products'] is List) {
-            data = decoded['products'];
-          } else if (decoded.containsKey('data') && decoded['data'] is List) {
-            data = decoded['data'];
-          } else if (decoded.containsKey('items') && decoded['items'] is List) {
-            data = decoded['items'];
-          } else {
-            // Fallback: look for any list in the response
-            for (var entry in decoded.entries) {
-              if (entry.value is List) {
-                data = entry.value;
-                break;
-              }
-            }
-          }
+          data = decoded['data'] ?? decoded['products'] ?? decoded['items'] ?? [];
         }
 
-        if (data.isEmpty && page == 1) {
-          return _getProductsFromFirestore();
+        print("API Debug: Fetched ${data.length} products.");
+
+        // Fetch flash sell products from Firestore to overlay
+        Map<String, Map<String, dynamic>> flashMap = {};
+        try {
+          final flashSnapshot = await _db.collection('flash_sell_products').get().timeout(const Duration(seconds: 5));
+          flashMap = {
+            for (var doc in flashSnapshot.docs) doc.id: doc.data()
+          };
+        } catch (e) {
+          print("Firebase Overlay skipped: $e");
         }
 
         return data.map((item) {
           final map = Map<String, dynamic>.from(item);
+          final String productId = map['id']?.toString() ?? map['_id']?.toString() ?? '';
 
-          String primaryImage = '';
-          String thumbImage = '';
-
-          // Recursive search for anything that looks like an image URL
-          String findImageUrl(dynamic data) {
-            if (data == null) return '';
-            if (data is String) {
-              String s = data.trim();
-              if (s.isEmpty) return '';
-
-              String low = s.toLowerCase();
-              // Aggressive URL/Path detection
-              if (low.startsWith('http') ||
-                  low.contains('pub-') ||
-                  low.contains('r2.dev') ||
-                  low.contains('cloudinary') ||
-                  low.contains('firebasestorage') ||
-                  low.contains('.jpg') ||
-                  low.contains('.png') ||
-                  low.contains('.jpeg') ||
-                  low.contains('.webp') ||
-                  low.contains('/images/') ||
-                  low.contains('/storage/')) {
-                return s;
-              }
-              // If it's a string with a slash and looks like an image key
-              if (s.contains('/') &&
-                  (low.contains('img') || low.contains('bnimg') || low.length > 15)) {
-                return s;
-              }
-            } else if (data is Map) {
-              // Priority search
-              final keys = data.keys.toList();
-              for (var key in keys) {
-                String k = key.toString().toLowerCase();
-                if (k == 'image20' ||
-                    k == 'image5' ||
-                    k == 'image_url' ||
-                    k == 'imageurl' ||
-                    k == 'image' ||
-                    k == 'url' ||
-                    k == 'thumb' ||
-                    k == 'pic' ||
-                    k == 'img' ||
-                    k.startsWith('img') ||
-                    k.contains('image')) {
-                  String found = findImageUrl(data[key]);
-                  if (found.isNotEmpty) return found;
-                }
-              }
-              // Exhaustive search
-              for (var v in data.values) {
-                if (v is String || v is Map || v is List) {
-                  String found = findImageUrl(v);
-                  if (found.isNotEmpty) return found;
-                }
-              }
-            } else if (data is List) {
-              for (var v in data) {
-                String found = findImageUrl(v);
-                if (found.isNotEmpty) return found;
-              }
-            }
-            return '';
-          }
-
-          primaryImage = findImageUrl(map);
-
-          // Try to find a second one for the thumbnail
-          if (map.containsKey('image5') && map['image5'] != null) {
-            thumbImage = map['image5'].toString();
-          } else {
-            thumbImage = primaryImage;
-          }
-
-          // Helper to normalize URLs
           String normalizeUrl(String url) {
             if (url.isEmpty || url.startsWith('http') || url.contains('pub-')) return url;
             if (url.startsWith('/')) return '$_baseUrl$url';
-            if (!url.contains('/')) return '$_baseUrl/images/$url';
-            return '$_baseUrl/$url';
+            return '$_baseUrl/images/$url';
           }
 
-          return {
-            "id": map['id']?.toString() ?? map['_id']?.toString() ?? '',
+          final result = {
+            "id": productId,
             "name": map['name']?.toString() ?? '',
             "price": map['price']?.toString() ?? '0',
             "flashSell": map['flashSell'] == true || map['isFlashSell'] == true,
@@ -141,86 +61,125 @@ class DatabaseService {
             "details": map['details']?.toString() ?? '',
             "videoLink": map['videoLink']?.toString() ?? '',
             "brand": map['brand']?.toString() ?? 'Others',
-            "category": map['category']?.toString() ?? 'Others',
+            "category": map['catagory']?.toString() ?? map['category']?.toString() ?? 'Others',
             "deliveryFee": map['deliveryFee']?.toString() ?? '0',
             "freeCoin": int.tryParse(map['freeCoin']?.toString() ?? '0') ?? 0,
             "size": map['size']?.toString() ?? '',
-            "stock": map['stock']?.toString() ?? 'Available',
+            "stock": (map['stock'] == 1 || map['stock'] == '1' || map['stock'] == 'Available') ? 'Available' : 'Not Available',
             "clicked": map['clicked'] ?? 0,
-            "image5": normalizeUrl(thumbImage),
-            "image20": normalizeUrl(primaryImage),
-            "image2": normalizeUrl(map['image2']?.toString() ?? ''),
-            "image3": normalizeUrl(map['image3']?.toString() ?? ''),
+            "image5": normalizeUrl(map['imageThree']?.toString() ?? map['image5']?.toString() ?? ''),
+            "image20": normalizeUrl(map['imagePrimary']?.toString() ?? map['image20']?.toString() ?? ''),
+            "image2": normalizeUrl(map['imageOne']?.toString() ?? map['image2']?.toString() ?? ''),
+            "image3": normalizeUrl(map['imageTwo']?.toString() ?? map['image3']?.toString() ?? ''),
             "fl-price": map['fl-price'] ?? map['flashPrice'],
             "oldPrice": map['oldPrice'],
             "flash-expire": map['flash-expire'] ?? map['flashExpire'],
             "newArrival": map['newArrival'] == true || map['isNewArrival'] == true,
+            "createdAt": map['createdAt'],
           };
+
+          if (flashMap.containsKey(productId)) {
+            final fData = flashMap[productId]!;
+            if (fData.containsKey('flashSell')) result['flashSell'] = fData['flashSell'] == true;
+            if (fData.containsKey('price')) result['price'] = fData['price'].toString();
+            if (fData.containsKey('oldPrice')) result['oldPrice'] = fData['oldPrice']?.toString();
+            if (fData.containsKey('fl-price')) result['fl-price'] = fData['fl-price']?.toString();
+            if (fData.containsKey('flash-expire')) result['flash-expire'] = fData['flash-expire'];
+          }
+
+          return result;
         }).toList();
       } else {
-        return page == 1 ? _getProductsFromFirestore() : [];
+        return [];
       }
     } catch (e) {
       print("Error fetching products from API: $e");
-      return page == 1 ? _getProductsFromFirestore() : [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _getProductsFromFirestore() async {
-    try {
-      final snapshot = await _db.collection('products').get();
-
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-
-        return {
-          "id": doc.id,
-          "name": data['name']?.toString() ?? '',
-          "price": data['price']?.toString() ?? '0',
-          "flashSell": data['flashSell'] == true,
-          "freeGift": data['freeGift'] == true,
-          "details": data['details']?.toString() ?? '',
-          "videoLink": data['videoLink']?.toString() ?? '',
-          "brand": data['brand']?.toString() ?? 'Others',
-          "category": data['category']?.toString() ?? 'Others',
-          "deliveryFee": data['deliveryFee']?.toString() ?? '0',
-          "freeCoin": int.tryParse(data['freeCoin']?.toString() ?? '0') ?? 0,
-          "size": data['size']?.toString() ?? '',
-          "stock": data['stock']?.toString() ?? 'Available',
-          "clicked": data['clicked'] ?? 0,
-          "image5": data['image5']?.toString() ?? data['imageUrl']?.toString() ?? data['image_url']?.toString() ?? '',
-          "image20": data['image20']?.toString() ?? data['imageUrl']?.toString() ?? data['image_url']?.toString() ?? '',
-          "image2": data['image2']?.toString() ?? '',
-          "image3": data['image3']?.toString() ?? '',
-          "fl-price": data['fl-price'],
-          "oldPrice": data['oldPrice'],
-          "flash-expire": data['flash-expire'],
-          "newArrival": data['newArrival'],
-        };
-      }).toList();
-    } catch (e) {
-
-      print("Firestore fallback error: $e");
       return [];
     }
   }
 
+  Future<void> updateProduct(String id, Map<String, dynamic> data) async {
+    try {
+      final Map<String, dynamic> apiData = {
+        'name': data['name']?.toString() ?? '',
+        'price': double.tryParse(data['price'].toString()) ?? 0.0,
+        'details': data['details']?.toString() ?? '',
+        'videoLink': data['videoLink']?.toString() ?? '',
+        'brand': data['brand']?.toString() ?? '',
+        'catagory': data['category']?.toString() ?? 'Others',
+        'imagePrimary': data['image20']?.toString() ?? '',
+        'imageOne': data['image2']?.toString() ?? '',
+        'imageTwo': data['image3']?.toString() ?? '',
+        'imageThree': data['image5']?.toString() ?? '',
+        'freeCoin': int.tryParse(data['freeCoin']?.toString() ?? '0') ?? 0,
+        'size': data['size']?.toString() ?? '',
+        'stock': data['stock'] == 'Available' ? 1 : 0,
+        'deliveryFee': data['deliveryFee']?.toString() ?? '0',
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+
+      final response = await http.put(
+        Uri.parse('$_baseUrl/products/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(apiData),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception('API Error: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<dynamic> addProduct(Map<String, dynamic> data) async {
+    try {
+      final Map<String, dynamic> apiData = {
+        'name': data['name']?.toString() ?? '',
+        'price': double.tryParse(data['price'].toString()) ?? 0.0,
+        'details': data['details']?.toString() ?? '',
+        'videoLink': data['videoLink']?.toString() ?? '',
+        'brand': data['brand']?.toString() ?? '',
+        'catagory': data['category']?.toString() ?? 'Others',
+        'imagePrimary': data['image20']?.toString() ?? '',
+        'imageOne': data['image2']?.toString() ?? '',
+        'imageTwo': data['image3']?.toString() ?? '',
+        'imageThree': data['image5']?.toString() ?? '',
+        'freeCoin': int.tryParse(data['freeCoin']?.toString() ?? '0') ?? 0,
+        'size': data['size']?.toString() ?? '',
+        'stock': data['stock'] == 'Available' ? 1 : 0,
+        'deliveryFee': data['deliveryFee']?.toString() ?? '0',
+        'createdAt': DateTime.now().toIso8601String(), // Send timestamp
+      };
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/products'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(apiData),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        return ApiDocRef(responseData['id']?.toString() ?? '');
+      } else {
+        throw Exception('API Error: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> deleteProduct(String id) async {
+    await http.delete(Uri.parse('$_baseUrl/products/$id'));
+  }
+
+  // Flash Sell Timer Methods
   Future<DateTime?> getFlashSellTimer() async {
     final doc = await _db.collection('flash_sell_timer').doc('current').get();
-
     if (!doc.exists) return null;
-
-    final data = doc.data();
-    final value = data?['time'];
-
-    if (value is Timestamp) {
-      return value.toDate();
-    }
-
-    if (value is String) {
-      return DateTime.tryParse(value);
-    }
-
+    final value = doc.data()?['time'];
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
     return null;
   }
 
@@ -234,133 +193,18 @@ class DatabaseService {
     return _db.collection('flash_sell_timer').doc('current').delete();
   }
 
-  Future<void> updateProduct(String id, Map<String, dynamic> data) async {
-    try {
-      final apiData = _sanitizeForApi(data);
-      if (data.containsKey('image20')) {
-        apiData['image'] = data['image20'];
-        apiData['imageUrl'] = data['image20'];
-        apiData['image_url'] = data['image20'];
-      }
-      if (data.containsKey('image5')) {
-        apiData['thumbnail'] = data['image5'];
-      }
-
-      final response = await http.put(
-        Uri.parse('$_baseUrl/products/$id'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(apiData),
-      );
-
-      if (response.statusCode != 200) {
-        await _db.collection('products').doc(id).update(data);
-      }
-    } catch (e) {
-      await _db.collection('products').doc(id).update(data);
-    }
-  }
-
   Future<void> addToFlashSell(String id, Map<String, dynamic> data) async {
-    // 1. Update main product (API + Firestore)
-    await updateProduct(id, data);
-
-    // 2. Add to flash_sell_products collection
-    // We fetch the full product data first to ensure we have everything in the new collection
-    try {
-      final doc = await _db.collection('products').doc(id).get();
-      if (doc.exists) {
-        final fullData = doc.data()!;
-        await _db.collection('flash_sell_products').doc(id).set({
-          ...fullData,
-          ...data,
-          "updatedAt": FieldValue.serverTimestamp(),
-        });
-      }
-    } catch (e) {
-      print("Error adding to flash_sell_products: $e");
-    }
-  }
-
-  Future<void> removeFromFlashSell(String id, Map<String, dynamic> data) async {
-    // 1. Update main product (API + Firestore)
-    await updateProduct(id, data);
-
-    // 2. Remove from flash_sell_products collection
-    try {
-      await _db.collection('flash_sell_products').doc(id).delete();
-    } catch (e) {
-      print("Error removing from flash_sell_products: $e");
-    }
-  }
-
-  Future<void> deleteProduct(String id) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$_baseUrl/products/$id'),
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        await _db.collection('products').doc(id).delete();
-      }
-    } catch (e) {
-      await _db.collection('products').doc(id).delete();
-    }
-  }
-
-  Future<dynamic> addProduct(Map<String, dynamic> data) async {
-    try {
-      final apiData = _sanitizeForApi(data);
-      if (data.containsKey('image20')) {
-        apiData['image'] = data['image20'];
-        apiData['imageUrl'] = data['image20'];
-        apiData['image_url'] = data['image20'];
-      }
-      if (data.containsKey('image5')) {
-        apiData['thumbnail'] = data['image5'];
-        apiData['thumb'] = data['image5'];
-      }
-
-      final response = await http.post(
-        Uri.parse('$_baseUrl/products'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(apiData),
-      );
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        return _ApiDocRef(responseData['id']?.toString() ?? '');
-      } else {
-        return await _db.collection('products').add({
-          ...data,
-          "createdAt": Timestamp.now(),
-          "clicked": 0,
-        });
-      }
-    } catch (e) {
-      return await _db.collection('products').add({
-        ...data,
-        "createdAt": Timestamp.now(),
-        "clicked": 0,
-      });
-    }
-  }
-
-  Map<String, dynamic> _sanitizeForApi(Map<String, dynamic> data) {
-    final Map<String, dynamic> sanitized = Map<String, dynamic>.from(data);
-    sanitized.removeWhere((key, value) => value is FieldValue || value is Timestamp);
-    return sanitized;
-  }
-
-  Future<void> _updateNamesDocument(List<String> names) async {
-    await _db.collection('product_names').doc(_namesDocId).set({
-      'names': names,
+    await _db.collection('flash_sell_products').doc(id).set({
+      ...data,
+      "updatedAt": FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
+  Future<void> removeFromFlashSell(String id, Map<String, dynamic> data) async {
+    await _db.collection('flash_sell_products').doc(id).delete();
+  }
+
+  // Name management methods
   Future<List<String>> getProductNames() async {
     final doc = await _db.collection('product_names').doc(_namesDocId).get();
     if (doc.exists) {
@@ -374,7 +218,7 @@ class DatabaseService {
     final names = await getProductNames();
     if (!names.contains(name)) {
       names.add(name);
-      await _updateNamesDocument(names);
+      await _db.collection('product_names').doc(_namesDocId).set({'names': names}, SetOptions(merge: true));
     }
   }
 
@@ -383,489 +227,66 @@ class DatabaseService {
     final index = names.indexOf(oldName);
     if (index != -1) {
       names[index] = newName;
-      await _updateNamesDocument(names);
+      await _db.collection('product_names').doc(_namesDocId).set({'names': names}, SetOptions(merge: true));
     }
   }
 
   Future<void> removeProductName(String name) async {
     final names = await getProductNames();
     names.remove(name);
-    await _updateNamesDocument(names);
+    await _db.collection('product_names').doc(_namesDocId).set({'names': names}, SetOptions(merge: true));
   }
 
-  Future<int> getAnonymousUserCount() async {
-    final snapshot =
-        await FirebaseFirestore.instance.collection('anonymous_users').get();
-    return snapshot.size;
-  }
+  // Analytics & Orders
+  Future<int> getAnonymousUserCount() async => (await _db.collection('anonymous_users').get()).size;
 
   Future<int> getTodayLoginCount() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('logins')
-            .where(
-              'timestamp',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-            )
-            .get();
-
-    return snapshot.docs.length;
+    return (await _db.collection('logins').where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay)).get()).docs.length;
   }
 
-  Future<List<Map<String, dynamic>>> getAllOrdersVerify() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('to_verify', isGreaterThan: [])
-              .get();
+  Future<List<Map<String, dynamic>>> getAllOrdersVerify() async => _getOrders('to_verify');
+  Future<List<Map<String, dynamic>>> getAllShipped() async => _getOrders('to_ship');
+  Future<List<Map<String, dynamic>>> getAllDelivered() async => _getOrders('completed');
+  Future<List<Map<String, dynamic>>> getAllReceived() async => _getOrders('to_receive');
 
-      List<Map<String, dynamic>> allOrders = [];
-
-      for (final userDoc in snapshot.docs) {
-        final userData = userDoc.data();
-        final toVerify = userData['to_verify'] as List<dynamic>?;
-
-        if (toVerify != null && toVerify.isNotEmpty) {
-          for (final order in toVerify) {
-            if (order is Map<String, dynamic>) {
-              final orderWithUserInfo = {
-                ...order,
-                'user_document_id': userDoc.id,
-                'user_email': userData['email'],
-                'user_name': userData['name'],
-                'user_phone': userData['phone'],
-                'order_source': 'user_collection',
-              };
-              allOrders.add(orderWithUserInfo);
-            }
+  Future<List<Map<String, dynamic>>> _getOrders(String field) async {
+    final snapshot = await _db.collection('users').where(field, isGreaterThan: []).get();
+    List<Map<String, dynamic>> allOrders = [];
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final items = data[field] as List<dynamic>?;
+      if (items != null) {
+        for (final item in items) {
+          if (item is Map<String, dynamic>) {
+            allOrders.add({...item, 'user_document_id': doc.id, 'user_email': data['email'], 'user_name': data['name'], 'user_phone': data['phone']});
           }
         }
       }
-
-      allOrders.sort((a, b) {
-        final timestampA =
-            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB =
-            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
-
-        return timestampB.compareTo(timestampA);
-      });
-
-      return allOrders;
-    } catch (e) {
-      print('Error getting orders: $e');
-      return [];
     }
+    allOrders.sort((a, b) => (b['timestamp'] ?? 0).compareTo(a['timestamp'] ?? 0));
+    return allOrders;
   }
 
-  Future<List<Map<String, dynamic>>> getAllShipped() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('to_ship', isGreaterThan: [])
-              .get();
+  Stream<int> getVerifyCountStream() => _db.collection('users').where('to_verify', isGreaterThan: []).snapshots().map((s) => s.size);
+  Stream<int> getShippingCountStream() => _db.collection('users').where('to_ship', isGreaterThan: []).snapshots().map((s) => s.size);
+  Stream<int> getReceiveCountStream() => _db.collection('users').where('to_receive', isGreaterThan: []).snapshots().map((s) => s.size);
+  Stream<int> getCompletedCountStream() => _db.collection('users').where('completed', isGreaterThan: []).snapshots().map((s) => s.size);
 
-      List<Map<String, dynamic>> allOrders = [];
+  Future<int> getTotalDownloadCount() async => (await _db.collection('anonymous_users').count().get()).count ?? 0;
+  Future<int> getTotalRegisteredCountStream() async => (await _db.collection('users').count().get()).count ?? 0;
 
-      for (final userDoc in snapshot.docs) {
-        final userData = userDoc.data();
-        final toShip = userData['to_ship'] as List<dynamic>?;
+  Stream<Map<String, dynamic>> getAdAnalyticsStream() => _db.collection("ad_analytics").doc("monthly_reward_ads").snapshots().map((s) => s.data() ?? {});
 
-        if (toShip != null && toShip.isNotEmpty) {
-          for (final order in toShip) {
-            if (order is Map<String, dynamic>) {
-              final orderWithUserInfo = {
-                ...order,
-                'user_document_id': userDoc.id,
-                'user_email': userData['email'],
-                'user_name': userData['name'],
-                'user_phone': userData['phone'],
-                'order_source': 'user_collection',
-              };
-              allOrders.add(orderWithUserInfo);
-            }
-          }
-        }
-      }
-
-      allOrders.sort((a, b) {
-        final timestampA =
-            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB =
-            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
-
-        return timestampB.compareTo(timestampA);
-      });
-
-      return allOrders;
-    } catch (e) {
-      print('Error getting orders: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getAllDelivered() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('completed', isGreaterThan: [])
-              .get();
-
-      List<Map<String, dynamic>> allOrders = [];
-
-      for (final userDoc in snapshot.docs) {
-        final userData = userDoc.data();
-        final toShip = userData['completed'] as List<dynamic>?;
-
-        if (toShip != null && toShip.isNotEmpty) {
-          for (final order in toShip) {
-            if (order is Map<String, dynamic>) {
-              final orderWithUserInfo = {
-                ...order,
-                'user_document_id': userDoc.id,
-                'user_email': userData['email'],
-                'user_name': userData['name'],
-                'user_phone': userData['phone'],
-                'order_source': 'user_collection',
-              };
-              allOrders.add(orderWithUserInfo);
-            }
-          }
-        }
-      }
-
-      allOrders.sort((a, b) {
-        final timestampA =
-            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB =
-            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
-
-        return timestampB.compareTo(timestampA);
-      });
-
-      return allOrders;
-    } catch (e) {
-      print('Error getting orders: $e');
-      return [];
-    }
-  }
-
-  Future<void> moveItemsToShip({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      final data = snapshot.data()!;
-
-      final toVerify = List<dynamic>.from(data['to_verify'] ?? []);
-      final toShip = List<dynamic>.from(data['to_ship'] ?? []);
-
-      toShip.addAll(toVerify);
-
-      toVerify.clear();
-
-      transaction.update(userDoc, {'to_verify': toVerify, 'to_ship': toShip});
+  Future<void> deleteCompletedOrder({required String userDocId, required Map<String, dynamic> orderData}) async {
+    await _db.runTransaction((t) async {
+      final ref = _db.collection('users').doc(userDocId);
+      final data = (await t.get(ref)).data();
+      final completed = List<dynamic>.from(data?['completed'] ?? []);
+      completed.removeWhere((o) => o is Map && o['timestamp'] == orderData['timestamp']);
+      t.update(ref, {'completed': completed});
     });
-  }
-
-  Future<void> moveItemsToCompleted({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      final data = snapshot.data()!;
-
-      final toShip = List<dynamic>.from(data['to_ship'] ?? []);
-      final completed = List<dynamic>.from(data['completed'] ?? []);
-
-      completed.addAll(toShip);
-
-      toShip.clear();
-      transaction.update(userDoc, {'to_ship': toShip, 'completed': completed});
-    });
-  }
-
-  Future<void> removeItemsFromVerify({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      transaction.update(userDoc, {'to_verify': []});
-    });
-  }
-
-  Future<void> removeItemsFromShip({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      transaction.update(userDoc, {'to_ship': []});
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getAllReceived() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('to_receive', isGreaterThan: [])
-              .get();
-
-      List<Map<String, dynamic>> allOrders = [];
-
-      for (final userDoc in snapshot.docs) {
-        final userData = userDoc.data();
-        final toReceive = userData['to_receive'] as List<dynamic>?;
-
-        if (toReceive != null && toReceive.isNotEmpty) {
-          for (final order in toReceive) {
-            if (order is Map<String, dynamic>) {
-              final orderWithUserInfo = {
-                ...order,
-                'user_document_id': userDoc.id,
-                'user_email': userData['email'],
-                'user_name': userData['name'],
-                'user_phone': userData['phone'],
-                'order_source': 'user_collection',
-              };
-              allOrders.add(orderWithUserInfo);
-            }
-          }
-        }
-      }
-
-      allOrders.sort((a, b) {
-        final timestampA =
-            a['timestamp'] ?? a['created_at'] ?? a['order_date'] ?? 0;
-        final timestampB =
-            b['timestamp'] ?? b['created_at'] ?? b['order_date'] ?? 0;
-
-        return timestampB.compareTo(timestampA);
-      });
-
-      return allOrders;
-    } catch (e) {
-      print('Error getting orders: $e');
-      return [];
-    }
-  }
-
-  Future<void> moveItemsToReceive({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      final data = snapshot.data()!;
-
-      final toShip = List<dynamic>.from(data['to_ship'] ?? []);
-      final toReceive = List<dynamic>.from(data['to_receive'] ?? []);
-
-      toReceive.addAll(toShip);
-
-      toShip.clear();
-
-      transaction.update(userDoc, {'to_ship': toShip, 'to_receive': toReceive});
-    });
-  }
-
-  Future<void> moveReceiveToCompleted({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      final data = snapshot.data()!;
-
-      final toReceive = List<dynamic>.from(data['to_receive'] ?? []);
-      final completed = List<dynamic>.from(data['completed'] ?? []);
-
-      completed.addAll(toReceive);
-
-      toReceive.clear();
-      transaction.update(userDoc, {'to_receive': toReceive, 'completed': completed});
-    });
-  }
-
-  Future<void> removeItemsFromReceive({required String userEmail}) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot =
-        await usersRef.where('email', isEqualTo: userEmail).limit(1).get();
-
-    if (querySnapshot.docs.isEmpty) {
-      throw Exception("User not found for email: $userEmail");
-    }
-
-    final userDoc = querySnapshot.docs.first.reference;
-
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(userDoc);
-      if (!snapshot.exists) throw Exception("User document not found");
-
-      transaction.update(userDoc, {'to_receive': []});
-    });
-  }
-
-  Stream<int> getReceiveCountStream() {
-    return _db
-        .collection('users')
-        .where('to_receive', isGreaterThan: [])
-        .snapshots()
-        .map((snapshot) => snapshot.size);
-  }
-
-  Stream<int> getVerifyCountStream() {
-    return _db
-        .collection('users')
-        .where('to_verify', isGreaterThan: [])
-        .snapshots()
-        .map((snapshot) => snapshot.size);
-  }
-
-  Stream<int> getShippingCountStream() {
-    return _db
-        .collection('users')
-        .where('to_ship', isGreaterThan: [])
-        .snapshots()
-        .map((snapshot) => snapshot.size);
-  }
-
-  Future<int> getTotalDownloadCount() async {
-    final aggregate = await _db.collection('anonymous_users').count().get();
-    return aggregate.count ?? 0;
-  }
-
-  Future<int> getTotalRegisteredCountStream() async {
-    final aggregate = await _db.collection('users').count().get();
-    return aggregate.count ?? 0;
-  }
-
-  Stream<int> getCompletedCountStream() {
-    return _db
-        .collection('users')
-        .where('completed', isGreaterThan: [])
-        .snapshots()
-        .map((snapshot) => snapshot.size);
-  }
-
-  Stream<List<QueryDocumentSnapshot>> getRecentLogins() {
-    final usersStream = _db
-        .collection('users')
-        .orderBy('lastLogin', descending: true)
-        .limit(20)
-        .snapshots()
-        .map((snapshot) => snapshot.docs);
-
-    final anonymousStream = _db
-        .collection('anonymous_users')
-        .orderBy('lastLogin', descending: true)
-        .limit(20)
-        .snapshots()
-        .map((snapshot) => snapshot.docs);
-
-    return usersStream.asyncMap((userDocs) async {
-      final anonDocs = await anonymousStream.first;
-      final combined = [...userDocs, ...anonDocs];
-
-      combined.sort((a, b) {
-        final aTime = a['lastLogin'] as Timestamp?;
-        final bTime = b['lastLogin'] as Timestamp?;
-        return bTime!.compareTo(aTime!);
-      });
-
-      return combined.take(20).toList();
-    });
-  }
-
-  Future<int> getTodayLogins() async {
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final startTimestamp = Timestamp.fromDate(startOfDay);
-
-    final users =
-        await _db
-            .collection('users')
-            .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
-            .get();
-
-    final anonymous =
-        await _db
-            .collection('anonymous_users')
-            .where('lastLogin', isGreaterThanOrEqualTo: startTimestamp)
-            .get();
-
-    return users.size + anonymous.size;
   }
 
   Stream<int> getTodayLoginsStream() {
@@ -925,251 +346,126 @@ class DatabaseService {
     return controller.stream;
   }
 
-  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
-    if (email.isEmpty) {
-      throw ArgumentError('Email cannot be empty');
-    }
+  Stream<List<QueryDocumentSnapshot>> getRecentLogins() {
+    final usersStream = _db
+        .collection('users')
+        .orderBy('lastLogin', descending: true)
+        .limit(20)
+        .snapshots()
+        .map((snapshot) => snapshot.docs);
 
-    try {
-      final usersRef = FirebaseFirestore.instance.collection('users');
-      final querySnapshot =
-          await usersRef.where('email', isEqualTo: email).limit(1).get();
+    final anonymousStream = _db
+        .collection('anonymous_users')
+        .orderBy('lastLogin', descending: true)
+        .limit(20)
+        .snapshots()
+        .map((snapshot) => snapshot.docs);
 
-      if (querySnapshot.docs.isEmpty) {
-        return null; // User not found
-      }
+    return usersStream.asyncMap((userDocs) async {
+      final anonDocs = await anonymousStream.first;
+      final combined = [...userDocs, ...anonDocs];
 
-      final doc = querySnapshot.docs.first;
-      final data = doc.data() as Map<String, dynamic>;
-      data['id'] = doc.id; // Add document ID to returned data
-
-      return data;
-    } catch (e) {
-      print('Error fetching user by email: $e');
-      rethrow; // Let caller handle error
-    }
-  }
-
-  Future<void> updateUserByEmail(
-    String email,
-    Map<String, dynamic> updatedData,
-  ) async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    final querySnapshot = await usersRef.where('email', isEqualTo: email).get();
-
-    if (querySnapshot.docs.isNotEmpty) {
-      final docId = querySnapshot.docs.first.id;
-
-      await usersRef.doc(docId).update(updatedData);
-      print('User updated successfully.');
-    } else {
-      print('No user found with this email.');
-    }
-  }
-
-  Future<void> createNotificationForUserByEmail({
-    required String email,
-    required String title,
-    required String body,
-    String deepLink = '',
-    bool highPriority = true,
-    bool withSound = true,
-  }) async {
-    final Map<String, dynamic>? user = await getUserByEmail(email);
-
-    if (user == null || (user['id']?.toString().isEmpty ?? true)) {
-      throw Exception('User not found for notification: $email');
-    }
-
-    await _db.collection('notifications').add({
-      'title': title,
-      'body': body,
-      'audience': 'Specific User',
-      'userId': user['id'],
-      'deepLink': deepLink,
-      'sentBy': 'admin_verify',
-      'status': 'queued',
-      'highPriority': highPriority,
-      'withSound': withSound,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> sendPushNotification({
-    required String email,
-    required String title,
-    required String body,
-  }) async {
-    final Map<String, dynamic>? user = await getUserByEmail(email);
-
-    if (user == null || (user['id']?.toString().isEmpty ?? true)) {
-      throw Exception('User not found for notification: $email');
-    }
-
-    await _db.collection('order_push_notifications').add({
-      'title': title,
-      'body': body,
-      'userId': user['id'],
-      'email': email,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getBanners() async {
-    try {
-      QuerySnapshot querySnapshot = await _db.collection('banners').get();
-
-      return querySnapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return {'id': doc.id, 'imageUrl': data['imageUrl']};
-      }).toList();
-    } catch (e) {
-      print("Error fetching active banners: $e");
-      return [];
-    }
-  }
-
-  Future<void> addBanner(String bannerUrl) async {
-    try {
-      await _db.collection('banners').add({
-        'imageUrl': bannerUrl,
-        'createdAt': Timestamp.now(),
+      combined.sort((a, b) {
+        final aTime = a['lastLogin'] as Timestamp?;
+        final bTime = b['lastLogin'] as Timestamp?;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
       });
-    } catch (e) {
-      print("Error adding banner: $e");
-      rethrow;
+
+      return combined.take(20).toList();
+    });
+  }
+  
+  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
+    final s = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
+    if (s.docs.isEmpty) return null;
+    return {...s.docs.first.data(), 'id': s.docs.first.id};
+  }
+
+  Future<void> addBanner(String url) => _db.collection('banners').add({'imageUrl': url, 'createdAt': Timestamp.now()});
+  Future<void> deleteBanner(String id) => _db.collection('banners').doc(id).delete();
+  Future<List<Map<String, dynamic>>> getBanners() async => (await _db.collection('banners').get()).docs.map((d) => {'id': d.id, 'imageUrl': d.data()['imageUrl']}).toList();
+  
+  Future<void> moveItemsToShip({required String userEmail}) => _moveOrder(userEmail, 'to_verify', 'to_ship');
+  Future<void> moveItemsToReceive({required String userEmail}) => _moveOrder(userEmail, 'to_ship', 'to_receive');
+  Future<void> moveReceiveToCompleted({required String userEmail}) => _moveOrder(userEmail, 'to_receive', 'completed');
+
+  Future<void> _moveOrder(String email, String from, String to) async {
+    final s = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
+    final ref = s.docs.first.reference;
+    await _db.runTransaction((t) async {
+      final data = (await t.get(ref)).data()!;
+      final listFrom = List<dynamic>.from(data[from] ?? []);
+      final listTo = List<dynamic>.from(data[to] ?? []);
+      listTo.addAll(listFrom);
+      t.update(ref, {from: [], to: listTo});
+    });
+  }
+
+  Future<void> removeItemsFromVerify({required String userEmail}) async {
+    final s = await _db.collection('users').where('email', isEqualTo: userEmail).limit(1).get();
+    if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_verify': []});
+  }
+
+  Future<void> removeItemsFromShip({required String userEmail}) async {
+    final s = await _db.collection('users').where('email', isEqualTo: userEmail).limit(1).get();
+    if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_ship': []});
+  }
+
+  Future<void> removeItemsFromReceive({required String userEmail}) async {
+    final s = await _db.collection('users').where('email', isEqualTo: userEmail).limit(1).get();
+    if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_receive': []});
+  }
+
+  Future<void> sendPushNotification({required String email, required String title, required String body}) async {
+    final user = await getUserByEmail(email);
+    if (user != null) {
+      await _db.collection('order_push_notifications').add({
+        'title': title,
+        'body': body,
+        'userId': user['id'],
+        'email': email,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     }
   }
 
-  Future<void> deleteBanner(String bannerId) async {
-    try {
-      await _db.collection('banners').doc(bannerId).delete();
-    } catch (e) {
-      print("Error deleting banner: $e");
-      rethrow;
-    }
+  Future<void> updateUserByEmail(String email, Map<String, dynamic> data) async {
+    final s = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
+    if (s.docs.isNotEmpty) await s.docs.first.reference.update(data);
   }
 
-  Future<void> setPaymentNumber({
-    required String number,
-    String? bkash,
-    String? nagad,
-    String? rocket,
-  }) async {
-    await FirebaseFirestore.instance
-        .collection("paymentNumber")
-        .doc('9O1UpVqUrdyuTqiA3YQH')
-        .set({
-          'number': number,
-          'bkash': bkash ?? '',
-          'nagad': nagad ?? '',
-          'rocket': rocket ?? '',
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-  }
-
-  Future<List<Map<String, dynamic>>> getAllFreeGiftRecevier() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('gift', isEqualTo: true)
-              .get();
-
-      List<Map<String, dynamic>> allReceivers = [];
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        allReceivers.add(data);
-      }
-
-      return allReceivers;
-    } catch (e) {
-      print('Error getting free gift receivers: $e');
-      return [];
-    }
-  }
-
-  Future<void> closeGiftDraw() async {
-    try {
-      final usersSnapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where('gift', isEqualTo: true)
-              .get();
-
-      for (final doc in usersSnapshot.docs) {
-        await doc.reference.update({'gift': false});
-      }
-
-      final productsSnapshot =
-          await FirebaseFirestore.instance
-              .collection('products')
-              .where('freeGift', isEqualTo: true)
-              .get();
-
-      for (final doc in productsSnapshot.docs) {
-        await doc.reference.update({'freeGift': false});
-      }
-    } catch (e) {
-      print('Error closing gift draw: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> updateGiftWinner(Map<String, dynamic> winner) async {
-    await FirebaseFirestore.instance.collection("free_gift").doc("winner").set({
-      "name": winner['name'] ?? winner['user_name'] ?? "Unknown",
-
-      /// combine district + thana
-      "location": "${winner['district'] ?? ''} ${winner['thana'] ?? ''}".trim(),
-
-      "user_id": winner['user_id'] ?? winner['uid'] ?? "",
-
-      "time": FieldValue.serverTimestamp(),
+  Future<void> setPaymentNumber({required String number, String? bkash, String? nagad, String? rocket}) async {
+    await _db.collection("paymentNumber").doc('9O1UpVqUrdyuTqiA3YQH').set({
+      'number': number,
+      'bkash': bkash ?? '',
+      'nagad': nagad ?? '',
+      'rocket': rocket ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
-  Stream<Map<String, dynamic>> getAdAnalyticsStream() {
-    return _db
-        .collection("ad_analytics")
-        .doc("monthly_reward_ads")
-        .snapshots()
-        .map((snapshot) => snapshot.data() ?? {});
+  Future<List<Map<String, dynamic>>> getAllFreeGiftRecevier() async {
+    final s = await _db.collection('users').where('gift', isEqualTo: true).get();
+    return s.docs.map((d) => {...d.data(), 'id': d.id}).toList();
   }
 
-  Future<void> deleteCompletedOrder({
-    required String userDocId,
-    required Map<String, dynamic> orderData,
-  }) async {
-    final userRef = _db.collection('users').doc(userDocId);
-    try {
-      await _db.runTransaction((transaction) async {
-        final userSnapshot = await transaction.get(userRef);
-        if (!userSnapshot.exists) {
-          throw Exception("User not found");
-        }
-        final userData = userSnapshot.data();
-        if (userData == null) {
-          throw Exception("User data is null");
-        }
+  Future<void> closeGiftDraw() async {
+    final batch = _db.batch();
+    final users = await _db.collection('users').where('gift', isEqualTo: true).get();
+    for (var d in users.docs) batch.update(d.reference, {'gift': false});
+    final products = await _db.collection('products').where('freeGift', isEqualTo: true).get();
+    for (var d in products.docs) batch.update(d.reference, {'freeGift': false});
+    await batch.commit();
+  }
 
-        final completedOrders = List<dynamic>.from(userData['completed'] ?? []);
-
-        completedOrders.removeWhere((order) {
-          if (order is Map<String, dynamic>) {
-            return order['timestamp'] == orderData['timestamp'];
-          }
-          return false;
-        });
-
-        transaction.update(userRef, {'completed': completedOrders});
-      });
-    } catch (e) {
-      print("Error deleting order: $e");
-      rethrow;
-    }
+  Future<void> updateGiftWinner(Map<String, dynamic> winner) async {
+    await _db.collection("free_gift").doc("winner").set({
+      "name": winner['name'] ?? winner['user_name'] ?? "Unknown",
+      "location": "${winner['district'] ?? ''} ${winner['thana'] ?? ''}".trim(),
+      "user_id": winner['user_id'] ?? winner['uid'] ?? "",
+      "time": FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

@@ -302,6 +302,15 @@ class _ReceivePageState extends State<ReceivePage> {
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
                                                       buildSafeText(
+                                                        "Order No",
+                                                        index + 1,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 20,
+                                                          color: Colors.red,
+                                                        ),
+                                                      ),
+                                                      buildSafeText(
                                                         "Customer",
                                                         order['customerName'] ??
                                                             order['user_name'],
@@ -317,6 +326,15 @@ class _ReceivePageState extends State<ReceivePage> {
                                                         style: const TextStyle(
                                                           fontWeight: FontWeight.bold,
                                                           fontSize: 20,
+                                                        ),
+                                                      ),
+                                                      buildSafeText(
+                                                        "Item Count",
+                                                        items.length,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 16,
+                                                          color: Colors.blue,
                                                         ),
                                                       ),
                                                     ],
@@ -359,9 +377,9 @@ class _ReceivePageState extends State<ReceivePage> {
                                                 ),
                                               ),
                                               const SizedBox(height: 10),
-                                              const Text(
-                                                "Items:",
-                                                style: TextStyle(
+                                              Text(
+                                                "Items: (${items.length})",
+                                                style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 16,
                                                 ),
@@ -438,12 +456,7 @@ class _ReceivePageState extends State<ReceivePage> {
                                               ),
                                               buildSafeText(
                                                 "Point in use",
-                                                _safeNum(
-                                                      order['baseDeliveryCharge'],
-                                                    ) -
-                                                    _safeNum(
-                                                      order['deliveryCharge'],
-                                                    ),
+                                                order['deliveryPointsUsed'],
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 18,
@@ -517,16 +530,40 @@ class _ReceivePageState extends State<ReceivePage> {
     );
   }
 
+  String _getNotificationOrderLabel(Map<String, dynamic> order) {
+    final dynamic explicitOrderId = order['order_id'];
+    if (explicitOrderId != null &&
+        explicitOrderId.toString().trim().isNotEmpty) {
+      return explicitOrderId.toString().trim();
+    }
+
+    final dynamic phone = order['phone'] ?? order['user_phone'];
+    if (phone != null && phone.toString().trim().isNotEmpty) {
+      return phone.toString().trim();
+    }
+
+    return 'your order';
+  }
+
   Future<void> _cancelOrder(
     Map<String, dynamic> order,
     String userEmail,
   ) async {
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
+      final orderLabel = _getNotificationOrderLabel(order);
+
       await _databaseService.removeItemsFromReceive(userEmail: userEmail);
       if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
         deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Canceled',
+        body: 'Your order $orderLabel has been canceled. Please contact support for more details.',
+      );
+
       setState(() {
         orders.removeWhere(
           (item) => item['order_id'] == order['order_id'],
@@ -548,6 +585,8 @@ class _ReceivePageState extends State<ReceivePage> {
   ) async {
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
+      final orderLabel = _getNotificationOrderLabel(order);
+
       await _databaseService.moveReceiveToCompleted(userEmail: userEmail);
 
       // Points calculation
@@ -564,6 +603,12 @@ class _ReceivePageState extends State<ReceivePage> {
           'free_delivery_info': currentPoints + points,
         });
       }
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Delivered',
+        body: 'Congratulations! Your order $orderLabel has been delivered successfully. Thank you for shopping with us!',
+      );
 
       setState(() {
         orders.removeWhere(

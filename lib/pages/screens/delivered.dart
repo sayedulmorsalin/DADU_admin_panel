@@ -169,10 +169,20 @@ class _DeliveredState extends State<Delivered> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            buildSafeText("Order No", index + 1,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                    color: Colors.red)),
                             buildSafeText("Customer Name", order['customerName'] ?? order['user_name'],
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                             buildSafeText("Phone", order['phone'] ?? order['user_phone'],
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+                            buildSafeText("Item Count", items.length,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.blue)),
                           ],
                         ),
                         Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
@@ -191,9 +201,9 @@ class _DeliveredState extends State<Delivered> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
 
                     const SizedBox(height: 10),
-                    const Text(
-                      "Items:",
-                      style: TextStyle(
+                    Text(
+                      "Items: (${items.length})",
+                      style: const TextStyle(
                         decoration: TextDecoration.none,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -245,8 +255,7 @@ class _DeliveredState extends State<Delivered> {
 
                     buildSafeText("Payment Method", order['paymentMethod']),
                     buildSafeText("Point in account", order['deliveryPoints']),
-                    buildSafeText("Point in use",
-                        _safeNum(order['baseDeliveryCharge']) - _safeNum(order['deliveryCharge']),
+                    buildSafeText("Point in use", order['deliveryPointsUsed'],
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
                     buildSafeText("Request for free delivery", order['freeDeliveryUsed'],
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
