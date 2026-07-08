@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import '../../services/api_service.dart';
 
 class ImageUploadService {
   final String _accessKey = dotenv.env['R2_ACCESS_KEY']!;
@@ -120,12 +121,7 @@ class ImageUploadService {
     'AWS4-HMAC-SHA256 Credential=$_accessKey/$credentialScope, '
         'SignedHeaders=$signedHeaders, Signature=$signature';
 
-    final response =
-    await http.put(Uri.parse(endpoint), headers: headers, body: bytes);
-
-    if (response.statusCode != 200) {
-      throw Exception('Upload failed: ${response.body}');
-    }
+    await ApiService().put(endpoint, headers: headers, body: bytes);
 
     return '$_publicBaseUrl/${Uri.encodeComponent(fileName)}';
   }
@@ -183,12 +179,7 @@ class ImageUploadService {
           'SignedHeaders=$signedHeaders, Signature=$signature',
     };
 
-    final response =
-    await http.delete(Uri.parse(endpoint), headers: headers);
-
-    if (response.statusCode != 204) {
-      throw Exception('Delete failed: ${response.body}');
-    }
+    await ApiService().delete(endpoint, headers: headers);
   }
 
   List<int> _getSignatureKey(String key, String date, String region) {

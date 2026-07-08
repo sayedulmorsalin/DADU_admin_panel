@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../services/api_service.dart';
 
 Future<void> deleteImageFromCloudinaryUrl(String imageUrl) async {
   final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'];
@@ -38,11 +39,9 @@ Future<void> deleteImageFromCloudinaryUrl(String imageUrl) async {
     final signature =
     sha1.convert(utf8.encode(signingString)).toString();
 
-    final deleteUri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$cloudName/image/destroy',
-    );
+    final deleteUri = 'https://api.cloudinary.com/v1_1/$cloudName/image/destroy';
 
-    final response = await http.post(
+    final result = await ApiService().post(
       deleteUri,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -54,17 +53,10 @@ Future<void> deleteImageFromCloudinaryUrl(String imageUrl) async {
       },
     );
 
-    if (response.statusCode == 200) {
-      final result = jsonDecode(response.body);
-      if (result['result'] == 'ok') {
-        print('✅ Image deleted successfully');
-      } else {
-        print('❌ Cloudinary error: ${response.body}');
-      }
+    if (result != null && result['result'] == 'ok') {
+      print('✅ Image deleted successfully');
     } else {
-      print(
-        '❌ Failed to delete image: ${response.statusCode} - ${response.body}',
-      );
+      print('❌ Cloudinary error: $result');
     }
   } catch (e) {
     print('❌ Exception while deleting image: $e');

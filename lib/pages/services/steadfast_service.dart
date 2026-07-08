@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../services/api_service.dart';
 
 class SteadfastService {
   final String _baseUrl = 'https://portal.packzy.com/api/v1';
@@ -31,39 +32,19 @@ class SteadfastService {
       'item_description': itemDescription ?? 'Apps Product',
     };
 
-    final response = await http.post(
-      Uri.parse('$_baseUrl/create_order'),
+    final responseData = await ApiService().post(
+      '$_baseUrl/create_order',
       headers: {
         'Api-Key': apiKey,
         'Secret-Key': secretKey,
-        'Content-Type': 'application/json',
       },
-      body: jsonEncode(requestBody),
+      body: requestBody,
     );
 
-    dynamic responseData;
-    try {
-      responseData = jsonDecode(response.body);
-    } catch (e) {
-      throw 'Server returned an invalid response. Please try again later.';
+    if (responseData is Map && responseData['status'] != null && responseData['status'] != 200) {
+      String error = responseData['errors']?.toString() ?? responseData['message']?.toString() ?? 'Unknown error';
+      throw 'Steadfast: $error';
     }
-
-    if (response.statusCode == 200) {
-      if (responseData is Map && responseData['status'] != null && responseData['status'] != 200) {
-        String error = responseData['errors']?.toString() ?? responseData['message']?.toString() ?? 'Unknown error';
-        throw 'Steadfast: $error';
-      }
-      return responseData;
-    } else {
-      String errorMessage = 'Failed to create order in Steadfast';
-      if (responseData is Map) {
-        if (responseData['message'] != null) {
-          errorMessage = responseData['message'];
-        } else if (responseData['errors'] != null) {
-          errorMessage = responseData['errors'].toString();
-        }
-      }
-      throw errorMessage;
-    }
+    return responseData;
   }
 }
