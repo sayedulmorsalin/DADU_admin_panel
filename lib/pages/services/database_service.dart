@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/api_service.dart';
+import '../../constants/constants.dart';
+import '../../exceptions/api_exception.dart';
 
 class ApiDocRef {
   final String id;
@@ -11,16 +14,17 @@ class ApiDocRef {
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final String _namesDocId = 'all_product_names';
-  final String _baseUrl = 'https://api.dadubd.com';
+  final String _baseUrl = apiBaseUrl;
 
   Future<List<Map<String, dynamic>>> getProducts({int page = 1, int limit = 20}) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final url = '$_baseUrl/products?page=$page&limit=$limit&t=$timestamp';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final path = '/products?page=$page&limit=$limit&t=$timestamp';
       
-      if (response.statusCode == 200) {
-        final dynamic decoded = json.decode(response.body);
+      // Using the new ApiService for authenticated requests
+      final dynamic decoded = await ApiService().get(path);
+      
+      if (decoded != null) {
         List<dynamic> data = [];
 
         if (decoded is List) {
@@ -28,8 +32,6 @@ class DatabaseService {
         } else if (decoded is Map) {
           data = decoded['data'] ?? decoded['products'] ?? decoded['items'] ?? [];
         }
-
-        print("API Debug: Fetched ${data.length} products.");
 
         // Fetch flash sell products from Firestore to overlay
         Map<String, Map<String, dynamic>> flashMap = {};
@@ -39,7 +41,7 @@ class DatabaseService {
             for (var doc in flashSnapshot.docs) doc.id: doc.data()
           };
         } catch (e) {
-          print("Firebase Overlay skipped: $e");
+          // Firebase Overlay skipped
         }
 
         return data.map((item) {
@@ -93,7 +95,6 @@ class DatabaseService {
         return [];
       }
     } catch (e) {
-      print("Error fetching products from API: $e");
       return [];
     }
   }
@@ -118,15 +119,7 @@ class DatabaseService {
         'updatedAt': DateTime.now().toIso8601String(),
       };
 
-      final response = await http.put(
-        Uri.parse('$_baseUrl/products/$id'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(apiData),
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        throw Exception('API Error: ${response.statusCode} - ${response.body}');
-      }
+      await ApiService().put('/products/$id', body: apiData);
     } catch (e) {
       rethrow;
     }
@@ -152,25 +145,15 @@ class DatabaseService {
         'createdAt': DateTime.now().toIso8601String(), // Send timestamp
       };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/products'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(apiData),
-      );
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        return ApiDocRef(responseData['id']?.toString() ?? '');
-      } else {
-        throw Exception('API Error: ${response.statusCode} - ${response.body}');
-      }
+      final responseData = await ApiService().post('/products', body: apiData);
+      return ApiDocRef(responseData['id']?.toString() ?? '');
     } catch (e) {
       rethrow;
     }
   }
 
   Future<void> deleteProduct(String id) async {
-    await http.delete(Uri.parse('$_baseUrl/products/$id'));
+    await ApiService().delete('/products/$id');
   }
 
   // Flash Sell Timer Methods
