@@ -1,19 +1,21 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/database_service.dart';
 import '../services/image_upload_service.dart';
 import '../widgets/product_card.dart';
 import 'package:fuzzy/fuzzy.dart';
 
 
-class AddPage extends StatefulWidget {
+class ManageProductPage extends StatefulWidget {
   @override
-  _AddPageState createState() => _AddPageState();
+  _ManageProductPageState createState() => _ManageProductPageState();
 }
 
-class _AddPageState extends State<AddPage> {
+class _ManageProductPageState extends State<ManageProductPage> {
   final DatabaseService _dbService = DatabaseService();
   final ImageUploadService _imageService = ImageUploadService();
   List<Map<String, dynamic>> products = [];
@@ -37,7 +39,7 @@ class _AddPageState extends State<AddPage> {
   final List<String> categories = [
     'Boots Master Grade',
     'Boots Master Grade Copy',
-    'Boots 4 Grade',
+    'Boots Copy 4 Grade',
     'Boots China Copy',
     'Boots Turf',
     'Gloves',
@@ -552,6 +554,60 @@ class _AddPageState extends State<AddPage> {
   }
 
 
+  void _shareProductLink(Map<String, dynamic> product) {
+    final productId = product['id'];
+    if (productId == null) return;
+    final String deepLink = 'https://dadubd.com/product?id=$productId';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Share Product',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: Icon(Icons.share, color: Colors.white),
+                ),
+                title: const Text('Share Link'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Share.share(
+                    'Check out this product: ${product['name']}\n$deepLink',
+                    subject: 'Product: ${product['name']}',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.orange,
+                  child: Icon(Icons.copy, color: Colors.white),
+                ),
+                title: const Text('Copy Link'),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: deepLink));
+                  Navigator.pop(context);
+                  _showSnackBar("Link copied to clipboard!");
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _deleteProduct(Map<String, dynamic> product) {
     final productName = product['name'];
     final productId = product['id'];
@@ -970,6 +1026,10 @@ class _AddPageState extends State<AddPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("Manage Product"),
+        centerTitle: true,
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddProductSheet,
         child: const Icon(Icons.add),
@@ -978,7 +1038,7 @@ class _AddPageState extends State<AddPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16.0, 40.0, 16.0, 16.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -1013,6 +1073,7 @@ class _AddPageState extends State<AddPage> {
                               product: filteredProducts[index],
                               onEdit: () => _showEditDialog(filteredProducts[index]),
                               onDelete: () => _deleteProduct(filteredProducts[index]),
+                              onShare: () => _shareProductLink(filteredProducts[index]),
                             );
                           } else {
                             return const Padding(

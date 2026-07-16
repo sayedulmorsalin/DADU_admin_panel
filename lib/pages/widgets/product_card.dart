@@ -5,12 +5,14 @@ class ProductCard extends StatelessWidget {
   final Map<String, dynamic> product;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onShare;
 
   const ProductCard({
     super.key,
     required this.product,
     required this.onEdit,
     required this.onDelete,
+    required this.onShare,
   });
 
   Widget _buildImage(String url) {
@@ -123,6 +125,16 @@ class ProductCard extends StatelessWidget {
                     child: Wrap(
                       spacing: 8,
                       children: [
+                        ElevatedButton.icon(
+                          onPressed: onShare,
+                          icon: const Icon(Icons.share, size: 16),
+                          label: const Text("Share"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                        ),
                         ElevatedButton.icon(
                           onPressed: onEdit,
                           icon: const Icon(Icons.edit, size: 16),

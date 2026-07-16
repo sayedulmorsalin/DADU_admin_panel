@@ -178,6 +178,7 @@ class DatabaseService {
 
   Future<void> addToFlashSell(String id, Map<String, dynamic> data) async {
     await _db.collection('flash_sell_products').doc(id).set({
+      'id': id,
       ...data,
       "updatedAt": FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

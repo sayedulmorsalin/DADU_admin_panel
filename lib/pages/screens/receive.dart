@@ -590,19 +590,11 @@ class _ReceivePageState extends State<ReceivePage> {
       await _databaseService.moveReceiveToCompleted(userEmail: userEmail);
 
       // Points calculation
-      int points = 10;
-      num currentPoints = _safeNum(order['deliveryPoints']);
-      num baseCharge = _safeNum(order['baseDeliveryCharge']);
+      num totalFreeCoins = _safeNum(order['totalFreeCoins']);
 
-      if (order['freeDeliveryUsed'] == true) {
-        await _databaseService.updateUserByEmail(userEmail, {
-          'free_delivery_info': (currentPoints - baseCharge) + points,
-        });
-      } else {
-        await _databaseService.updateUserByEmail(userEmail, {
-          'free_delivery_info': currentPoints + points,
-        });
-      }
+      await _databaseService.updateUserByEmail(userEmail, {
+        'free_delivery_info': FieldValue.increment(totalFreeCoins),
+      });
 
       await _databaseService.sendPushNotification(
         email: userEmail,

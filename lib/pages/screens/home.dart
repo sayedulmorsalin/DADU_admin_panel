@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dadu_admin_panel/pages/screens/banner.dart';
 import 'package:dadu_admin_panel/pages/screens/delivered.dart';
-import 'package:dadu_admin_panel/pages/screens/add_page.dart';
+import 'package:dadu_admin_panel/pages/screens/manage_product.dart';
 import 'package:dadu_admin_panel/pages/screens/draw.dart';
 import 'package:dadu_admin_panel/pages/screens/flash_sell.dart';
 import 'package:dadu_admin_panel/pages/screens/search.dart';
@@ -291,11 +291,11 @@ class _AdminHomeState extends State<AdminHome> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildActionButton(
-                icon: Icons.add,
-                label: "Add Product",
+                icon: Icons.inventory_2,
+                label: "Manage Product",
                 count: null,
                 color: Colors.yellow.shade800,
-                onPressed: () => _navigateToAddProduct(context),
+                onPressed: () => _navigateToManageProduct(context),
               ),
               _buildActionButton(
                 icon: Icons.upload,
@@ -587,8 +587,8 @@ class _AdminHomeState extends State<AdminHome> {
     );
   }
 
-  void _navigateToAddProduct(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => AddPage()));
+  void _navigateToManageProduct(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ManageProductPage()));
   }
 
   void _navigateToSearchUser(BuildContext context) {

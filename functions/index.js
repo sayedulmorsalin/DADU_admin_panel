@@ -17,7 +17,8 @@ exports.sendNotification = onDocumentCreated(
 
     const title = data.title;
     const body = data.body;
-    const deepLink = data.deepLink || "";
+    const link = data.link || data.deepLink || "";
+    const image = data.image || "";
     const audience = data.audience || "All Users";
     const userId = data.userId || "";
     const segment = data.segment || "";
@@ -49,13 +50,72 @@ exports.sendNotification = onDocumentCreated(
     }
 
     try {
+      // Base message structure
+      const baseMessage = {
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: {
+          // Removed click_action: "FLUTTER_NOTIFICATION_CLICK"
+        },
+        android: {
+          priority: highPriority ? "high" : "normal",
+          notification: {
+            sound: withSound ? "default" : undefined,
+            // Removed clickAction: "FLUTTER_NOTIFICATION_CLICK"
+          },
+        },
+        apns: {
+          headers: highPriority
+            ? { "apns-priority": "10" }
+            : { "apns-priority": "5" },
+          payload: {
+            aps: {
+              sound: withSound ? "default" : undefined,
+              "mutable-content": 1,
+            },
+          },
+        },
+      };
+
+      // Add image if provided
+      if (image && image.trim().length > 0) {
+        const imageUrl = image.trim();
+        baseMessage.notification.image = imageUrl;
+        baseMessage.android.notification.image = imageUrl;
+        baseMessage.apns.fcm_options = { image: imageUrl };
+        baseMessage.data.image = imageUrl;
+
+        // Ensure notification is displayed as a banner/expanded with image
+        baseMessage.android.notification.notificationPriority = "PRIORITY_MAX";
+        baseMessage.android.notification.visibility = "PUBLIC";
+      }
+
+      // Add link if provided
+      if (link && link.trim().length > 0) {
+        baseMessage.data.link = link;
+        baseMessage.data.deepLink = link;
+      }
+
+      console.log("📤 Final Message Payload:", JSON.stringify(baseMessage, null, 2));
+
       // ===============================
       // 🔴 1. SEND TO SPECIFIC USER (TOKEN)
       // ===============================
       if (audience === "Specific User" && userId) {
         console.log("👤 Sending to specific user:", userId);
 
-        const userDoc = await admin.firestore().collection("users").doc(userId).get();
+        let userDoc = await admin.firestore().collection("users").doc(userId).get();
+
+        // If not found by ID, try searching by email
+        if (!userDoc.exists) {
+          console.log("🔍 User not found by ID, searching by email...");
+          const userQuery = await admin.firestore().collection("users").where("email", "==", userId).limit(1).get();
+          if (!userQuery.empty) {
+            userDoc = userQuery.docs[0];
+          }
+        }
 
         if (!userDoc.exists) {
           console.log("❌ User not found");
@@ -76,26 +136,8 @@ exports.sendNotification = onDocumentCreated(
         }
 
         const response = await admin.messaging().send({
+          ...baseMessage,
           token: token,
-          notification: {
-            title: title,
-            body: body,
-          },
-          data: {
-            deepLink: deepLink,
-          },
-          android: {
-            priority: highPriority ? "high" : "normal",
-            notification: withSound ? { sound: "default" } : undefined,
-          },
-          apns: {
-            headers: highPriority
-              ? { "apns-priority": "10" }
-              : { "apns-priority": "5" },
-            payload: {
-              aps: withSound ? { sound: "default" } : {},
-            },
-          },
         });
 
         console.log("✅ Sent to specific user:", response);
@@ -119,26 +161,8 @@ exports.sendNotification = onDocumentCreated(
       console.log("📢 Sending to topic:", topic);
 
       const response = await admin.messaging().send({
+        ...baseMessage,
         topic: topic,
-        notification: {
-          title: title,
-          body: body,
-        },
-        data: {
-          deepLink: deepLink,
-        },
-        android: {
-          priority: highPriority ? "high" : "normal",
-          notification: withSound ? { sound: "default" } : undefined,
-        },
-        apns: {
-          headers: highPriority
-            ? { "apns-priority": "10" }
-            : { "apns-priority": "5" },
-          payload: {
-            aps: withSound ? { sound: "default" } : {},
-          },
-        },
       });
 
       console.log("✅ Sent to topic:", response);
@@ -173,7 +197,7 @@ exports.sendOrderPushNotification = onDocumentCreated(
     const notificationRef = snapshot.ref;
     const data = snapshot.data();
 
-    const { title, body, userId } = data;
+    const { title, body, userId, link, image } = data;
 
     if (!title || !body || !userId) {
       console.log("❌ Missing title, body, or userId");
@@ -199,16 +223,20 @@ exports.sendOrderPushNotification = onDocumentCreated(
         return null;
       }
 
-      const response = await admin.messaging().send({
+      const message = {
         token: token,
         notification: {
           title: title,
           body: body,
         },
+        data: {
+          // Removed click_action: "FLUTTER_NOTIFICATION_CLICK"
+        },
         android: {
           priority: "high",
           notification: {
             sound: "default",
+            // Removed clickAction: "FLUTTER_NOTIFICATION_CLICK"
           },
         },
         apns: {
@@ -218,12 +246,27 @@ exports.sendOrderPushNotification = onDocumentCreated(
           payload: {
             aps: {
               sound: "default",
+              "mutable-content": 1,
             },
           },
         },
-      });
+      };
 
-      console.log("✅ Sent to specific user:", response);
+      if (image && image.trim().length > 0) {
+        message.notification.image = image;
+        message.android.notification.image = image;
+        message.apns.fcm_options = { image: image };
+        message.data.image = image;
+      }
+
+      if (link && link.trim().length > 0) {
+        message.data.link = link;
+        message.data.deepLink = link;
+      }
+
+      const response = await admin.messaging().send(message);
+
+      console.log("✅ Sent order notification:", response);
     } catch (error) {
       console.error("🔥 Error sending notification:", error);
     } finally {

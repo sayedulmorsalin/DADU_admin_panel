@@ -19,7 +19,7 @@ class _BannerPageState extends State<BannerPage> {
   List<Map<String, dynamic>> products = [];
   final List<String> brands = ['Adidas', 'Nike', 'Puma', 'Gloves', 'Other_boots', 'Others'];
 
-  // Add Product Controllers
+  // Add Banner Controllers
   final TextEditingController _addNameController = TextEditingController();
   final TextEditingController _addPriceController = TextEditingController();
   final TextEditingController _addDetailsController = TextEditingController();
