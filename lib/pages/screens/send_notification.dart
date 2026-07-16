@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../services/database_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SendNotification extends StatefulWidget {
   const SendNotification({super.key});
@@ -9,10 +11,13 @@ class SendNotification extends StatefulWidget {
 }
 
 class _SendNotificationState extends State<SendNotification> {
+  final DatabaseService _dbService = DatabaseService();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _segmentController = TextEditingController();
+  final TextEditingController _linkController = TextEditingController();
+  final TextEditingController _imageController = TextEditingController();
   final Set<String> _deletingNotificationIds = <String>{};
 
   static const List<String> _audiences = <String>[
@@ -31,11 +36,75 @@ class _SendNotificationState extends State<SendNotification> {
     _messageController.clear();
     _userIdController.clear();
     _segmentController.clear();
+    _linkController.clear();
+    _imageController.clear();
     setState(() {
       _selectedAudience = _audiences.first;
       _highPriority = false;
       _withSound = true;
     });
+  }
+
+  Future<void> _showProductPickerDialog() async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Product'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _dbService.getProducts(limit: 50),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                final products = snapshot.data ?? [];
+                if (products.isEmpty) {
+                  return const Center(child: Text('No products found'));
+                }
+                return ListView.builder(
+                  itemCount: products.length,
+                  itemBuilder: (context, index) {
+                    final product = products[index];
+                    final imageUrl = product['image20'] ?? product['image5'] ?? '';
+                    return ListTile(
+                      leading: imageUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                            )
+                          : const Icon(Icons.image),
+                      title: Text(product['name'] ?? ''),
+                      subtitle: Text('৳${product['price']}'),
+                      onTap: () {
+                        setState(() {
+                          _linkController.text = 'https://dadubd.com/product?id=${product['id']}';
+                          _imageController.text = imageUrl;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String? _validateForm() {
@@ -70,6 +139,8 @@ class _SendNotificationState extends State<SendNotification> {
     final Map<String, dynamic> payload = {
       'title': _titleController.text.trim(),
       'body': _messageController.text.trim(),
+      'link': _linkController.text.trim(),
+      'image': _imageController.text.trim(),
       'audience': _selectedAudience,
       'sentBy': 'admin',
       'status': 'queued',
@@ -188,6 +259,8 @@ class _SendNotificationState extends State<SendNotification> {
     _messageController.dispose();
     _userIdController.dispose();
     _segmentController.dispose();
+    _linkController.dispose();
+    _imageController.dispose();
     super.dispose();
   }
 
@@ -271,6 +344,50 @@ class _SendNotificationState extends State<SendNotification> {
                                 labelText: 'Message',
                                 alignLabelWithHint: true,
                                 prefixIcon: const Icon(Icons.message_outlined),
+                                filled: true,
+                                fillColor: colors.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Action Link & Image',
+                                    style: Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _showProductPickerDialog,
+                                  icon: const Icon(Icons.link),
+                                  label: const Text('Link Product'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _linkController,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'Deep Link URL',
+                                prefixIcon: const Icon(Icons.link_outlined),
+                                filled: true,
+                                fillColor: colors.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _imageController,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'Image URL',
+                                prefixIcon: const Icon(Icons.image_outlined),
                                 filled: true,
                                 fillColor: colors.surfaceContainerHighest,
                                 border: OutlineInputBorder(
@@ -432,15 +549,34 @@ class _SendNotificationState extends State<SendNotification> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  CircleAvatar(
-                                    radius: 22,
-                                    backgroundColor: colors.primaryContainer,
-                                    child: Icon(
-                                      Icons.notifications_active_outlined,
-                                      color: colors.onPrimaryContainer,
-                                    ),
-                                  ),
+                                  _imageController.text.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: CachedNetworkImage(
+                                            imageUrl: _imageController.text,
+                                            width: 44,
+                                            height: 44,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (context, url, error) => CircleAvatar(
+                                              radius: 22,
+                                              backgroundColor: colors.primaryContainer,
+                                              child: Icon(
+                                                Icons.notifications_active_outlined,
+                                                color: colors.onPrimaryContainer,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : CircleAvatar(
+                                          radius: 22,
+                                          backgroundColor: colors.primaryContainer,
+                                          child: Icon(
+                                            Icons.notifications_active_outlined,
+                                            color: colors.onPrimaryContainer,
+                                          ),
+                                        ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -470,6 +606,19 @@ class _SendNotificationState extends State<SendNotification> {
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                         ),
+                                        if (_linkController.text.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              'Link: ${_linkController.text}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: colors.primary,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),

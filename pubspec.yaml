@@ -47,6 +47,7 @@ dependencies:
   shared_preferences: ^2.5.4
   fuzzy: ^0.5.1
   crypto: ^3.0.6
+  share_plus: ^10.1.4
 
 dev_dependencies:
   flutter_launcher_icons: ^0.14.4
