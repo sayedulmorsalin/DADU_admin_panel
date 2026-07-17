@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/database_service.dart';
 import 'gift_item.dart';
 import 'new_arrival.dart';
+import 'sell_analytics.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -368,6 +369,19 @@ class _AdminHomeState extends State<AdminHome> {
             ],
           ),
           const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildActionButton(
+                icon: Icons.analytics_outlined,
+                label: "Sell Analytics",
+                count: null,
+                color: Colors.teal.shade700,
+                onPressed: () => _navigateToSellAnalytics(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
           const SizedBox(height: 30),
           _buildLastLoginList(),
         ],
@@ -663,6 +677,13 @@ class _AdminHomeState extends State<AdminHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ReceivePage()),
+    );
+  }
+
+  void _navigateToSellAnalytics(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SellAnalyticsPage()),
     );
   }
 }

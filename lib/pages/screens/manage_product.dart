@@ -57,6 +57,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
   final TextEditingController _addDeliveryFeeController = TextEditingController();
   final TextEditingController _addFreeCoinController = TextEditingController();
   final TextEditingController _addSizeController = TextEditingController();
+  final TextEditingController _addDeveloperCommissionController = TextEditingController();
   final TextEditingController _addDetailsController = TextEditingController();
   final TextEditingController _addVideoController = TextEditingController();
   XFile? _pickedImage;
@@ -73,6 +74,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
   late TextEditingController _editDeliveryFeeController;
   late TextEditingController _editFreeCoinController;
   late TextEditingController _editSizeController;
+  late TextEditingController _editDeveloperCommissionController;
   late TextEditingController _editDetailsController;
   late TextEditingController _editVideoController;
   late String _editSelectedBrand;
@@ -108,6 +110,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     _editDeliveryFeeController = TextEditingController();
     _editFreeCoinController = TextEditingController();
     _editSizeController = TextEditingController();
+    _editDeveloperCommissionController = TextEditingController();
     _editDetailsController = TextEditingController();
     _editVideoController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
@@ -226,6 +229,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     _editDeliveryFeeController.text = _editingProduct!['deliveryFee'] ?? '0';
     _editFreeCoinController.text = _editingProduct!['freeCoin']?.toString() ?? '0';
     _editSizeController.text = _editingProduct!['size'] ?? '';
+    _editDeveloperCommissionController.text = _editingProduct!['developerCommission']?.toString() ?? '0';
     _editDetailsController.text = _editingProduct!['details'];
     _editVideoController.text = _editingProduct!['videoLink'] ?? '';
     _editSelectedBrand = brands.contains(_editingProduct!['brand']) ? _editingProduct!['brand'] : 'Others';
@@ -348,6 +352,15 @@ class _ManageProductPageState extends State<ManageProductPage> {
                   controller: _editSizeController,
                   decoration: const InputDecoration(
                     labelText: "Size",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _editDeveloperCommissionController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Developer Commission",
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -502,6 +515,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
         'deliveryFee': _editDeliveryFeeController.text,
         'freeCoin': int.tryParse(_editFreeCoinController.text) ?? 0,
         'size': _editSizeController.text,
+        'developerCommission': _editDeveloperCommissionController.text,
         'stock': _editSelectedStock,
         'details': _editDetailsController.text,
         'brand': _editSelectedBrand,
@@ -668,6 +682,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     _addDeliveryFeeController.clear();
     _addFreeCoinController.clear();
     _addSizeController.clear();
+    _addDeveloperCommissionController.clear();
     _addDetailsController.clear();
     _addVideoController.clear();
     _pickedImage = null;
@@ -787,6 +802,15 @@ class _ManageProductPageState extends State<ManageProductPage> {
                 controller: _addSizeController,
                 decoration: const InputDecoration(
                   labelText: "Size",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addDeveloperCommissionController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Developer Commission",
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -922,6 +946,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
         "deliveryFee": _addDeliveryFeeController.text,
         "freeCoin": int.tryParse(_addFreeCoinController.text) ?? 0,
         "size": _addSizeController.text,
+        "developerCommission": _addDeveloperCommissionController.text,
         "stock": _selectedStock,
         "details": _addDetailsController.text,
         "brand": _selectedBrand,
@@ -1098,6 +1123,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     _addDeliveryFeeController.dispose();
     _addFreeCoinController.dispose();
     _addSizeController.dispose();
+    _addDeveloperCommissionController.dispose();
     _addDetailsController.dispose();
     _addVideoController.dispose();
     _editNameController.dispose();
@@ -1105,6 +1131,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     _editDeliveryFeeController.dispose();
     _editFreeCoinController.dispose();
     _editSizeController.dispose();
+    _editDeveloperCommissionController.dispose();
     _editDetailsController.dispose();
     _editVideoController.dispose();
     _searchController.dispose();

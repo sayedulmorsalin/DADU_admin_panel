@@ -31,11 +31,15 @@ exports.sendNotification = onDocumentCreated(
         return;
       }
 
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
       await notificationRef.set(
         {
           status,
           ...extra,
           processedAt: serverTimestamp(),
+          expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
         },
         { merge: true }
       );
@@ -50,31 +54,23 @@ exports.sendNotification = onDocumentCreated(
     }
 
     try {
-      // Base message structure
+      // Base message structure optimized for Android
       const baseMessage = {
         notification: {
           title: title,
           body: body,
         },
         data: {
-          // Removed click_action: "FLUTTER_NOTIFICATION_CLICK"
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
         },
         android: {
-          priority: highPriority ? "high" : "normal",
+          priority: "high", // High priority for the message delivery
           notification: {
             sound: withSound ? "default" : undefined,
-            // Removed clickAction: "FLUTTER_NOTIFICATION_CLICK"
-          },
-        },
-        apns: {
-          headers: highPriority
-            ? { "apns-priority": "10" }
-            : { "apns-priority": "5" },
-          payload: {
-            aps: {
-              sound: withSound ? "default" : undefined,
-              "mutable-content": 1,
-            },
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
+            notificationPriority: "PRIORITY_MAX", // Visual priority
+            visibility: "PUBLIC",
+            channelId: "default_channel", // A common standard, can be customized
           },
         },
       };
@@ -84,12 +80,8 @@ exports.sendNotification = onDocumentCreated(
         const imageUrl = image.trim();
         baseMessage.notification.image = imageUrl;
         baseMessage.android.notification.image = imageUrl;
-        baseMessage.apns.fcm_options = { image: imageUrl };
         baseMessage.data.image = imageUrl;
-
-        // Ensure notification is displayed as a banner/expanded with image
-        baseMessage.android.notification.notificationPriority = "PRIORITY_MAX";
-        baseMessage.android.notification.visibility = "PUBLIC";
+        baseMessage.data.imageUrl = imageUrl;
       }
 
       // Add link if provided
@@ -230,33 +222,26 @@ exports.sendOrderPushNotification = onDocumentCreated(
           body: body,
         },
         data: {
-          // Removed click_action: "FLUTTER_NOTIFICATION_CLICK"
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
         },
         android: {
           priority: "high",
           notification: {
             sound: "default",
-            // Removed clickAction: "FLUTTER_NOTIFICATION_CLICK"
-          },
-        },
-        apns: {
-          headers: {
-            "apns-priority": "10",
-          },
-          payload: {
-            aps: {
-              sound: "default",
-              "mutable-content": 1,
-            },
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
+            notificationPriority: "PRIORITY_MAX",
+            visibility: "PUBLIC",
+            channelId: "default_channel",
           },
         },
       };
 
       if (image && image.trim().length > 0) {
-        message.notification.image = image;
-        message.android.notification.image = image;
-        message.apns.fcm_options = { image: image };
-        message.data.image = image;
+        const imageUrl = image.trim();
+        message.notification.image = imageUrl;
+        message.android.notification.image = imageUrl;
+        message.data.image = imageUrl;
+        message.data.imageUrl = imageUrl;
       }
 
       if (link && link.trim().length > 0) {

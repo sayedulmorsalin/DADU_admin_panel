@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/api_service.dart';
 import '../../constants/constants.dart';
-import '../../exceptions/api_exception.dart';
 
 class ApiDocRef {
   final String id;
@@ -68,6 +66,7 @@ class DatabaseService {
             "freeCoin": int.tryParse(map['freeCoin']?.toString() ?? '0') ?? 0,
             "size": map['size']?.toString() ?? '',
             "stock": (map['stock'] == 1 || map['stock'] == '1' || map['stock'] == 'Available') ? 'Available' : 'Not Available',
+            "developerCommission": map['developerCommission']?.toString() ?? '0',
             "clicked": map['clicked'] ?? 0,
             "image5": normalizeUrl(map['imageThree']?.toString() ?? map['image5']?.toString() ?? ''),
             "image20": normalizeUrl(map['imagePrimary']?.toString() ?? map['image20']?.toString() ?? ''),
@@ -116,6 +115,7 @@ class DatabaseService {
         'size': data['size']?.toString() ?? '',
         'stock': data['stock'] == 'Available' ? 1 : 0,
         'deliveryFee': data['deliveryFee']?.toString() ?? '0',
+        'developerCommission': double.tryParse(data['developerCommission'].toString()) ?? 0.0,
         'updatedAt': DateTime.now().toIso8601String(),
       };
 
@@ -142,6 +142,7 @@ class DatabaseService {
         'size': data['size']?.toString() ?? '',
         'stock': data['stock'] == 'Available' ? 1 : 0,
         'deliveryFee': data['deliveryFee']?.toString() ?? '0',
+        'developerCommission': double.tryParse(data['developerCommission'].toString()) ?? 0.0,
         'createdAt': DateTime.now().toIso8601String(), // Send timestamp
       };
 
@@ -451,5 +452,51 @@ class DatabaseService {
       "user_id": winner['user_id'] ?? winner['uid'] ?? "",
       "time": FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  // Sell Analytics Methods
+  Stream<QuerySnapshot<Map<String, dynamic>>> getMonthlyAnalyticsStream() {
+    return _db.collection('sell_analytics').orderBy('monthKey', descending: true).snapshots();
+  }
+
+  Future<void> syncMonthlyAnalytics() async {
+    final List<Map<String, dynamic>> allDeliveredOrders = await getAllDelivered();
+    final Map<String, Map<String, dynamic>> monthlyData = {};
+
+    for (final order in allDeliveredOrders) {
+      DateTime? orderDate;
+      if (order['timestamp'] is Timestamp) {
+        orderDate = (order['timestamp'] as Timestamp).toDate();
+      } else if (order['order_date'] != null) {
+        orderDate = DateTime.fromMillisecondsSinceEpoch(order['order_date']);
+      }
+
+      if (orderDate == null) continue;
+
+      final monthKey = "${orderDate.year}-${orderDate.month.toString().padLeft(2, '0')}";
+      final monthName = DateFormat('MMMM yyyy').format(orderDate);
+
+      if (!monthlyData.containsKey(monthKey)) {
+        monthlyData[monthKey] = {
+          'monthKey': monthKey,
+          'monthName': monthName,
+          'totalSales': 0.0,
+          'totalOrders': 0,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      }
+
+      final total = double.tryParse(order['total']?.toString() ?? '0') ?? 0.0;
+      monthlyData[monthKey]!['totalSales'] += total;
+      monthlyData[monthKey]!['totalOrders'] += 1;
+    }
+
+    // Use a batch to update Firestore
+    final batch = _db.batch();
+    for (final entry in monthlyData.entries) {
+      final ref = _db.collection('sell_analytics').doc(entry.key);
+      batch.set(ref, entry.value, SetOptions(merge: true));
+    }
+    await batch.commit();
   }
 }

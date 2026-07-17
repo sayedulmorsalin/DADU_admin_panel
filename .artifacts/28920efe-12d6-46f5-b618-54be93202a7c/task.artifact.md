@@ -1,6 +1,6 @@
-- [x] Refactor `functions/index.js` to use a robust payload builder
-    - [x] Create `buildMessage` helper or clean up logic
-    - [x] Ensure `image` and `link` are only included if non-empty
-    - [x] Use `clickAction` and `click_action` correctly
-- [x] Update `sendOrderPushNotification` to support the new payload structure
-- [x] Verify changes and update walkthrough
+- [x] Optimize `functions/index.js` for Android-only notifications
+    - [x] Update `sendNotification` with Android-specific payload
+    - [x] Remove iOS (APNS) specific logic
+    - [x] Update `sendOrderPushNotification` with same logic
+- [ ] Verify deployment and functionality
+- [x] Create walkthrough with verification steps
