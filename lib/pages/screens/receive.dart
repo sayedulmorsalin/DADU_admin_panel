@@ -587,7 +587,11 @@ class _ReceivePageState extends State<ReceivePage> {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
 
+      // 1. Move the order in the user's document
       await _databaseService.moveReceiveToCompleted(userEmail: userEmail);
+
+      // 2. Record the sale for analytics (includes commission lookup)
+      await _databaseService.recordSale(order);
 
       // Points calculation
       num totalFreeCoins = _safeNum(order['totalFreeCoins']);

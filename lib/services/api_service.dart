@@ -165,4 +165,58 @@ class ApiService {
 
   Future<dynamic> delete(String path, {Map<String, String>? headers, bool requireAuth = true}) =>
       request(path: path, method: 'DELETE', headers: headers, requireAuth: requireAuth);
+
+  // --- Messaging Methods ---
+
+  Future<List<Map<String, dynamic>>> fetchMessageThreads() async {
+    try {
+      final response = await get('/admin/messages/users');
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['threads'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchMessageThreads Error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchUserMessages(String userId) async {
+    try {
+      final response = await get('/messages/$userId');
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['messages'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchUserMessages Error: $e');
+      return [];
+    }
+  }
+
+  Future<bool> sendReply(String userId, String message) async {
+    try {
+      final response = await post('/messages', body: {
+        'userId': userId,
+        'message': message,
+      });
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService sendReply Error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> toggleBlockUser(String userId, bool block) async {
+    try {
+      final response = await post('/admin/users/block', body: {
+        'userId': userId,
+        'block': block,
+      });
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService toggleBlockUser Error: $e');
+      return false;
+    }
+  }
 }

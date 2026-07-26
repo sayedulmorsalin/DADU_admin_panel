@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/api_service.dart';
@@ -368,6 +369,12 @@ class DatabaseService {
     return {...s.docs.first.data(), 'id': s.docs.first.id};
   }
 
+  Future<Map<String, dynamic>?> getUserById(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    return {...doc.data() as Map<String, dynamic>, 'id': doc.id};
+  }
+
   Future<void> addBanner(String url) => _db.collection('banners').add({'imageUrl': url, 'createdAt': Timestamp.now()});
   Future<void> deleteBanner(String id) => _db.collection('banners').doc(id).delete();
   Future<List<Map<String, dynamic>>> getBanners() async => (await _db.collection('banners').get()).docs.map((d) => {'id': d.id, 'imageUrl': d.data()['imageUrl']}).toList();
@@ -459,44 +466,96 @@ class DatabaseService {
     return _db.collection('sell_analytics').orderBy('monthKey', descending: true).snapshots();
   }
 
-  Future<void> syncMonthlyAnalytics() async {
-    final List<Map<String, dynamic>> allDeliveredOrders = await getAllDelivered();
-    final Map<String, Map<String, dynamic>> monthlyData = {};
+  Stream<QuerySnapshot<Map<String, dynamic>>> getSalesRecordsStream() {
+    return _db.collection('sales_records').orderBy('recordedAt', descending: true).limit(100).snapshots();
+  }
 
-    for (final order in allDeliveredOrders) {
+  Future<void> recordSale(Map<String, dynamic> order) async {
+    try {
       DateTime? orderDate;
       if (order['timestamp'] is Timestamp) {
         orderDate = (order['timestamp'] as Timestamp).toDate();
       } else if (order['order_date'] != null) {
         orderDate = DateTime.fromMillisecondsSinceEpoch(order['order_date']);
       }
-
-      if (orderDate == null) continue;
+      orderDate ??= DateTime.now();
 
       final monthKey = "${orderDate.year}-${orderDate.month.toString().padLeft(2, '0')}";
       final monthName = DateFormat('MMMM yyyy').format(orderDate);
 
-      if (!monthlyData.containsKey(monthKey)) {
-        monthlyData[monthKey] = {
-          'monthKey': monthKey,
-          'monthName': monthName,
-          'totalSales': 0.0,
-          'totalOrders': 0,
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
+      // Fetch commissions for all items in this order
+      double orderDeveloperCommission = 0.0;
+      int orderProductsCount = 0;
+      final List<dynamic> items = order['items'] is List ? order['items'] : [];
+
+      for (final item in items) {
+        if (item is Map) {
+          final int qty = int.tryParse(item['quantity']?.toString() ?? '1') ?? 1;
+          final String productId = item['id']?.toString() ?? '';
+          orderProductsCount += qty;
+
+          if (productId.isNotEmpty) {
+            try {
+              // Search for the product specifically to get current commission
+              final path = '/products/$productId';
+              final dynamic decoded = await ApiService().get(path);
+              if (decoded != null && decoded['product'] != null) {
+                final product = decoded['product'];
+                final comm = double.tryParse(product['developerCommission']?.toString() ?? '0') ?? 0.0;
+                orderDeveloperCommission += (comm * qty);
+              }
+            } catch (e) {
+              debugPrint("Could not fetch commission for product $productId: $e");
+            }
+          }
+        }
       }
 
       final total = double.tryParse(order['total']?.toString() ?? '0') ?? 0.0;
-      monthlyData[monthKey]!['totalSales'] += total;
-      monthlyData[monthKey]!['totalOrders'] += 1;
-    }
+      final deliveryCharge = double.tryParse(order['deliveryCharge']?.toString() ?? '0') ?? 0.0;
 
-    // Use a batch to update Firestore
-    final batch = _db.batch();
-    for (final entry in monthlyData.entries) {
-      final ref = _db.collection('sell_analytics').doc(entry.key);
-      batch.set(ref, entry.value, SetOptions(merge: true));
+      // 1. Save detailed sale record
+      final saleRecord = {
+        'order_id': order['order_id'],
+        'customerName': order['customerName'] ?? order['user_name'],
+        'phone': order['phone'] ?? order['user_phone'],
+        'total': total,
+        'deliveryCharge': deliveryCharge,
+        'recordedAt': FieldValue.serverTimestamp(),
+        'calculatedCommission': orderDeveloperCommission,
+        'productsCount': orderProductsCount,
+        'monthKey': monthKey,
+      };
+      await _db.collection('sales_records').add(saleRecord);
+
+      // 2. Increment Monthly Analytics
+      final analyticsRef = _db.collection('sell_analytics').doc(monthKey);
+      await _db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(analyticsRef);
+        if (!snapshot.exists) {
+          transaction.set(analyticsRef, {
+            'monthKey': monthKey,
+            'monthName': monthName,
+            'totalSales': total,
+            'totalOrders': 1,
+            'totalProductsCount': orderProductsCount,
+            'totalDeliveryCharges': deliveryCharge,
+            'totalDeveloperCommission': orderDeveloperCommission,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          transaction.update(analyticsRef, {
+            'totalSales': FieldValue.increment(total),
+            'totalOrders': FieldValue.increment(1),
+            'totalProductsCount': FieldValue.increment(orderProductsCount),
+            'totalDeliveryCharges': FieldValue.increment(deliveryCharge),
+            'totalDeveloperCommission': FieldValue.increment(orderDeveloperCommission),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint("Error recording sale: $e");
     }
-    await batch.commit();
   }
 }

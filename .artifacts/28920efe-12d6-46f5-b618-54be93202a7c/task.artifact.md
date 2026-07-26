@@ -1,6 +1,0 @@
-- [x] Optimize `functions/index.js` for Android-only notifications
-    - [x] Update `sendNotification` with Android-specific payload
-    - [x] Remove iOS (APNS) specific logic
-    - [x] Update `sendOrderPushNotification` with same logic
-- [ ] Verify deployment and functionality
-- [x] Create walkthrough with verification steps
