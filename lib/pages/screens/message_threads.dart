@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dadu_admin_panel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:clipboard/clipboard.dart';
 import '../../services/api_service.dart';
 import '../services/database_service.dart';
 import 'admin_chat_screen.dart';
@@ -203,6 +204,18 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                             ],
                           ),
                           trailing: const Icon(Icons.chevron_right),
+                          onLongPress: () {
+                            FlutterClipboard.copy(displayEmail).then((value) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Email copied to clipboard'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            });
+                          },
                           onTap: () {
                             Navigator.push(
                               context,

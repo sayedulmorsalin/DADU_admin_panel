@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dadu_admin_panel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:clipboard/clipboard.dart';
 import '../../services/api_service.dart';
 
 class AdminChatScreen extends StatefulWidget {
@@ -223,6 +224,19 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
     }
   }
 
+  void _copyEmail() {
+    FlutterClipboard.copy(widget.userEmail).then((value) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email copied to clipboard'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -267,9 +281,21 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
             onSelected: (value) {
               if (value == 'block') {
                 _handleBlockToggle();
+              } else if (value == 'copy_email') {
+                _copyEmail();
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'copy_email',
+                child: const Row(
+                  children: [
+                    Icon(Icons.content_copy, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Copy Email'),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'block',
                 child: Row(
