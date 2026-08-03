@@ -147,6 +147,7 @@ class _ShippingState extends State<Shipping> {
     }
 
     addValue(order['order_id']);
+    addValue(order['transactionId']);
     addValue(order['customerName']);
     addValue(order['user_name']);
     addValue(order['customerEmail']);
@@ -158,6 +159,7 @@ class _ShippingState extends State<Shipping> {
     addValue(order['address']);
     addValue(order['paymentMethod']);
     addValue(order['deliveryPoints']);
+    addValue(order['note']);
 
     final items = getItems(order);
     for (final item in items) {
@@ -406,6 +408,15 @@ class _ShippingState extends State<Shipping> {
                                                           color: Colors.blue,
                                                         ),
                                                       ),
+                                                      if (order['transactionId'] != null)
+                                                        buildSafeText(
+                                                          "Transaction ID",
+                                                          order['transactionId'],
+                                                          style: const TextStyle(
+                                                            color: Colors.teal,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
                                                     ],
                                                   ),
                                                   Icon(isExpanded
@@ -446,6 +457,16 @@ class _ShippingState extends State<Shipping> {
                                                   fontSize: 20,
                                                 ),
                                               ),
+                                              if (order['note'] != null && order['note'].toString().isNotEmpty)
+                                                buildSafeText(
+                                                  "Note",
+                                                  order['note'],
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18,
+                                                    color: Colors.deepOrange,
+                                                  ),
+                                                ),
 
                                               const SizedBox(height: 10),
                                               Text(
@@ -639,6 +660,13 @@ class _ShippingState extends State<Shipping> {
     Map<String, dynamic> order,
     String userEmail,
   ) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
@@ -654,8 +682,11 @@ class _ShippingState extends State<Shipping> {
       await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Canceled',
-        body: 'Your order $orderLabel has been canceled. Please contact support if you have any questions.',
+        body:
+            'Your order $orderLabel has been canceled. Please contact support if you have any questions.',
       );
+
+      if (mounted) Navigator.pop(context); // Close loading dialog
 
       // Update UI
       setState(() {
@@ -667,6 +698,7 @@ class _ShippingState extends State<Shipping> {
         const SnackBar(content: Text("Order canceled successfully")),
       );
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Close loading dialog
       _scaffoldMessengerKey.currentState!.showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );

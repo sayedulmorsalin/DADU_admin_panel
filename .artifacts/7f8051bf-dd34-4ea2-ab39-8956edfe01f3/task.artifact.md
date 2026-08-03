@@ -1,6 +1,7 @@
-- [ ] Modify `message_threads.dart` to visually distinguish unread threads
-    - [ ] Add background highlighting for unread threads
-    - [ ] Add unread count badge
-    - [ ] Improve thread list item layout (bold text, message snippet)
-- [ ] Verify the UI changes with a manual check of the code
+- [ ] Implement pagination in `MessageThreadsPage`
+    - [ ] Add `ScrollController` and pagination state (`_currentPage`, `_hasMore`, `_isLoadingMore`)
+    - [ ] Update `_loadThreads` to handle initial/refresh state
+    - [ ] Add `_loadMoreThreads` for infinite scrolling
+    - [ ] Update UI to include a bottom loader and attach `ScrollController`
+- [ ] Verify infinite scrolling functionality
 - [ ] Create walkthrough artifact

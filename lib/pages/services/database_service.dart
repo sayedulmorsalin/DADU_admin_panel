@@ -15,10 +15,16 @@ class DatabaseService {
   final String _namesDocId = 'all_product_names';
   final String _baseUrl = apiBaseUrl;
 
-  Future<List<Map<String, dynamic>>> getProducts({int page = 1, int limit = 20}) async {
+  Future<List<Map<String, dynamic>>> getProducts({int page = 1, int limit = 20, String? brand, String? category}) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final path = '/products?page=$page&limit=$limit&t=$timestamp';
+      String path = '/products?page=$page&limit=$limit&t=$timestamp';
+      if (brand != null && brand.isNotEmpty) {
+        path += '&brand=${Uri.encodeComponent(brand)}';
+      }
+      if (category != null && category.isNotEmpty) {
+        path += '&category=${Uri.encodeComponent(category)}';
+      }
       
       // Using the new ApiService for authenticated requests
       final dynamic decoded = await ApiService().get(path);
@@ -379,17 +385,28 @@ class DatabaseService {
   Future<void> deleteBanner(String id) => _db.collection('banners').doc(id).delete();
   Future<List<Map<String, dynamic>>> getBanners() async => (await _db.collection('banners').get()).docs.map((d) => {'id': d.id, 'imageUrl': d.data()['imageUrl']}).toList();
   
-  Future<void> moveItemsToShip({required String userEmail}) => _moveOrder(userEmail, 'to_verify', 'to_ship');
+  Future<void> moveItemsToShip({required String userEmail, String? transactionId}) => 
+      _moveOrder(userEmail, 'to_verify', 'to_ship', extraData: transactionId != null ? {'transactionId': transactionId} : null);
+  
   Future<void> moveItemsToReceive({required String userEmail}) => _moveOrder(userEmail, 'to_ship', 'to_receive');
   Future<void> moveReceiveToCompleted({required String userEmail}) => _moveOrder(userEmail, 'to_receive', 'completed');
 
-  Future<void> _moveOrder(String email, String from, String to) async {
+  Future<void> _moveOrder(String email, String from, String to, {Map<String, dynamic>? extraData}) async {
     final s = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
     final ref = s.docs.first.reference;
     await _db.runTransaction((t) async {
       final data = (await t.get(ref)).data()!;
       final listFrom = List<dynamic>.from(data[from] ?? []);
       final listTo = List<dynamic>.from(data[to] ?? []);
+      
+      if (extraData != null) {
+        for (var item in listFrom) {
+          if (item is Map<String, dynamic>) {
+            item.addAll(extraData);
+          }
+        }
+      }
+
       listTo.addAll(listFrom);
       t.update(ref, {from: [], to: listTo});
     });
@@ -410,7 +427,13 @@ class DatabaseService {
     if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_receive': []});
   }
 
-  Future<void> sendPushNotification({required String email, required String title, required String body}) async {
+  Future<void> sendPushNotification({
+    required String email,
+    required String title,
+    required String body,
+    String? link,
+    String? image,
+  }) async {
     final user = await getUserByEmail(email);
     if (user != null) {
       await _db.collection('order_push_notifications').add({
@@ -418,6 +441,8 @@ class DatabaseService {
         'body': body,
         'userId': user['id'],
         'email': email,
+        if (link != null) 'link': link,
+        if (image != null) 'image': image,
         'createdAt': FieldValue.serverTimestamp(),
       });
     }

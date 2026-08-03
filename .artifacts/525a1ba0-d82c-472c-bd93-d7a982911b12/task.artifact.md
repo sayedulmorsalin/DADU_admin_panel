@@ -1,5 +1,6 @@
-- [ ] Add loading dialog to `_rejectOrder` in `verify.dart`
-- [ ] Add loading dialog to `_cancelOrder` in `shipping.dart`
-- [ ] Add loading dialog to `_cancelOrder` in `receive.dart`
-- [ ] Add loading dialog to `_completeOrder` in `receive.dart`
-- [ ] Verify all transitions and UI feedback
+- [ ] Update `DatabaseService` to support passing extra data (Transaction ID) during order moves.
+- [ ] Implement Search and Transaction ID input in `Verify` screen.
+- [ ] Add Transaction ID display and search support to `Shipping` screen.
+- [ ] Add Transaction ID display and search support to `Receive` screen.
+- [ ] Implement Search and Transaction ID display in `Delivered` screen.
+- [ ] Final verification.

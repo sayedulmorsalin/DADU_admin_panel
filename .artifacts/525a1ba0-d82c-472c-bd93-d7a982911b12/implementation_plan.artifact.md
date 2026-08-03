@@ -1,31 +1,39 @@
-# Implementation Plan - Add Loading Indicators to Order Actions
+# Implementation Plan - Transaction ID Tracking & Search
 
-Add loading overlays to order processing actions in the Verify, Shipping, and Receive screens to prevent duplicate submissions and provide visual feedback.
+Implement Transaction ID input during order verification and ensure it is displayed and searchable across all subsequent order stages.
 
 ## Proposed Changes
 
-### [UI Enhancements]
+### [Database Layer]
+
+#### [MODIFY] [database_service.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/services/database_service.dart)
+- Update `_moveOrder` to accept an optional `Map<String, dynamic> extraData` to merge into moved orders.
+- Update `moveItemsToShip` to take `transactionId` and pass it to `_moveOrder`.
+
+### [Verify Orders Screen]
 
 #### [MODIFY] [verify.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/verify.dart)
-- Add a loading dialog to `_rejectOrder` method.
-- (Existing `_acceptOrder` already has a loading indicator).
+- **Input**: Update `_acceptOrder` to show a dialog with a `TextField` for the Transaction ID.
+- **Search**: Implement search UI (search bar) and fuzzy search logic.
+- **Display**: Show Transaction ID if present (though usually added here).
+
+### [Shipping & Receive Screens]
 
 #### [MODIFY] [shipping.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/shipping.dart)
-- Add a loading dialog to `_cancelOrder` method.
-- (Existing `_shippedOrder` already has a loading indicator).
-
 #### [MODIFY] [receive.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/receive.dart)
-- Add a loading dialog to `_cancelOrder` method.
-- Add a loading dialog to `_completeOrder` method.
+- **Display**: Show `Transaction ID` prominently in the order card.
+- **Search**: Update `_buildSearchableText` to include `transactionId`.
+
+### [Delivered Screen]
+
+#### [MODIFY] [delivered.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/delivered.dart)
+- **Search**: Implement search UI and fuzzy search logic (consistent with other screens).
+- **Display**: Show `Transaction ID` in the order card.
 
 ## Verification Plan
 
 ### Manual Verification
-1.  Navigate to the **Verify** screen and click **Reject** on an order.
-    - Verify a loading indicator appears.
-    - Verify the order is removed and the loader disappears after completion.
-2.  Navigate to the **Shipping** screen and click **Canceled** on an order.
-    - Verify a loading indicator appears.
-3.  Navigate to the **Receive** screen and click **Canceled** or **Delivered** on an order.
-    - Verify a loading indicator appears.
-4.  Confirm that multiple rapid clicks are prevented while the loader is active.
+1. **Verify**: Accept an order, enter "TEST-TXN-123".
+2. **Search**: In the Verify screen, search for "TEST-TXN-123".
+3. **Flow**: Move the order to Shipping -> Receive -> Delivered.
+4. **Verification**: In each screen, confirm "Transaction ID: TEST-TXN-123" is visible and the search bar finds the order when typing that ID.

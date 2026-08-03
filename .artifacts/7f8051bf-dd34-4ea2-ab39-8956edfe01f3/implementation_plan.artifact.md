@@ -1,36 +1,37 @@
-# Implementation Plan - Differentiate Read and Unread Messages
+# Implementation Plan - Infinite Scrolling for Message Threads
 
-This plan outlines the changes required to visually distinguish between read and unread message threads in the `MessageThreadsPage`.
+This plan outlines the changes to implement pagination (infinite scrolling) in the `MessageThreadsPage`, allowing users to load the next 20 chats when scrolling to the bottom.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> The implementation assumes the backend API (`/admin/messages/users`) provides an `unreadCount` or similar field in the thread object. If this field is named differently (e.g., `unread_count`, `hasUnread`), please let me know.
-
-> [!NOTE]
-> I will also add a fallback check: if the last message was from the user and not the admin, we can treat it as "potentially unread" if a dedicated count is missing.
+> - **Backend Support**: This implementation assumes the `/admin/messages/users` endpoint supports `page` and `limit` query parameters. I have already updated the `ApiService` to include these.
+> - **Polling Interaction**: Real-time polling (every 30s) will refresh the **first page only** to keep the most recent messages updated. Loading more pages will happen only on user scroll.
 
 ## Proposed Changes
 
-### [Component Name] Messaging UI
+### UI & Scroll Management
 
 #### [MODIFY] [message_threads.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/message_threads.dart)
-
-- Update the `ListView.separated` item builder to check for unread status.
-- Apply different styles for unread threads:
-    - **Background Color**: Use a light blue background (e.g., `Colors.blue[50]`) for unread threads.
-    - **Unread Badge**: Display a red circular badge with the unread count.
-    - **Text Styling**: Make the name or last message timestamp bolder for unread messages.
-- Add a "Last Message" snippet if the data is available in the thread object.
-
-#### [MODIFY] [home.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/home.dart)
-
-- (Optional) Update the "Messages" button on the dashboard to show the total number of unread messages across all threads if that information can be derived or fetched efficiently.
+- **State Additions**:
+    - `ScrollController _scrollController`: To monitor scroll position.
+    - `int _currentPage = 1`: Tracks the current page.
+    - `bool _hasMore = true`: Flag to stop loading when no more data is available.
+    - `bool _isLoadingMore = false`: Prevents multiple simultaneous load requests.
+- **Scroll Listener**:
+    - Attach a listener to `_scrollController` that triggers `_loadMoreThreads()` when the user is near the bottom (e.g., 200 pixels from edge).
+- **Refactored Loading Logic**:
+    - `_loadThreads({bool showLoading = true})`: Resets to page 1 and clears existing threads. Used for initial load and refresh.
+    - `_loadMoreThreads()`: Fetches the next page and appends it to `_threads`.
+- **List Construction**:
+    - Update `ListView.separated` to use `_scrollController`.
+    - Add a loading indicator (bottom spinner) as the last item in the list if `_hasMore` is true.
 
 ## Verification Plan
 
 ### Manual Verification
-1. Open the "Messages" screen.
-2. Observe that threads with unread messages have a distinct background color and a count badge.
-3. Tap on an unread thread to open the chat.
-4. Go back to the threads list and verify the thread is now marked as read (after the 30s polling or manual refresh).
+1. Open the "User Messages" screen.
+2. Scroll to the bottom of the first 20 messages.
+3. Verify that a loading spinner appears and new messages are appended to the list.
+4. Verify that the "Pinned" threads still remain at the top (pinned status check will be applied to newly loaded items as well).
+5. Verify that manual refresh (pull-to-refresh or button) correctly resets the list to the first page.

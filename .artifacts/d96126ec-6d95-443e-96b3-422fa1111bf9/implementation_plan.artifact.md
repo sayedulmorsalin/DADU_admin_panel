@@ -1,42 +1,33 @@
-# Implementation Plan - Display and Send Images in Chat
+# Implementation Plan - Display Order Notes and Send to Steadfast
 
-The Dadu app now supports sending images in messages. This plan covers updating the Admin Panel to display these images and enabling the admin to send images as well.
+The Dadu app allows users to add a note during checkout. This plan covers displaying this note in the Admin Panel's verification and shipping screens and ensuring it's sent to Steadfast when an order is shipped.
 
 ## User Review Required
 
-> [!IMPORTANT]
-> I will be using Cloudflare R2 for uploading chat images from the admin panel, as it's the primary storage used in the admin panel's `ImageUploadService`. The client app uses Cloudinary, but both should work as the backend stores and provides the full URL.
+> [!NOTE]
+> The note is already being sent to Steadfast in the `Shipping` screen. This task focuses on making it visible to the admin during the verification process.
 
 ## Proposed Changes
 
-### [ApiService]
+### [Verify Screen]
 
-#### [MODIFY] [api_service.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/services/api_service.dart)
-- Update `sendReply` to accept an optional `imageUrl`.
+#### [MODIFY] [verify.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/verify.dart)
+- Update `_buildOrderSummary` to include the `note` field in the generated summary text.
+- Update `_buildSearchableText` to make the `note` field searchable.
+- In the `ListView.builder`, add a `buildSafeText` or `buildCopyableRow` for the "Note" field so admins can see it while verifying the order.
 
-### [ImageUploadService]
+### [Shipping Screen]
 
-#### [MODIFY] [image_upload_service.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/services/image_upload_service.dart)
-- Add `uploadChatImage` method to upload a chat image to Cloudflare R2.
-
-### [AdminChatScreen]
-
-#### [MODIFY] [admin_chat_screen.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/admin_chat_screen.dart)
-- Update the message bubble to display an image if `imageUrl` is present in the message data.
-- Use `CachedNetworkImage` for better performance and error handling.
-- Add an image picker button to the message input area.
-- Add UI to preview the selected image before sending.
-- Update `_sendMessage` logic to upload the image if selected and include its URL in the API call.
+#### [MODIFY] [shipping.dart](file:///D:/all code/Flutter all projects/dadu_admin_panel/lib/pages/screens/shipping.dart)
+- Update `_buildSearchableText` to include the `note` field.
+- In the `ListView.builder`, add `buildSafeText("Note", order['note'])` to the expanded order details.
 
 ## Verification Plan
 
-### Automated Tests
-- I'll check for compilation errors after changes.
-
 ### Manual Verification
-- Deploy the admin panel and navigate to a message thread.
-- Verify that messages with images from the client app are displayed correctly.
-- Test sending a text-only message.
-- Test sending an image-only message (with optional text).
-- Test sending a message with both text and an image.
-- Verify that the image is uploaded to R2 and displayed in the chat.
+- Place an order in the Dadu app with a custom note.
+- Open the Admin Panel and go to the "Verify Orders" screen.
+- Verify that the note is visible and searchable.
+- Accept the order and move it to "Shipping".
+- Go to the "Shipping Orders" screen and verify the note is still visible.
+- Click "Shipped" and verify (via Steadfast logs if possible, or by confirming the API call includes the note) that the note is sent to Steadfast.

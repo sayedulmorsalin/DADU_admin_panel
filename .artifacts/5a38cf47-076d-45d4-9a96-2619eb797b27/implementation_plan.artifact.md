@@ -35,6 +35,7 @@ This plan outlines the steps to replicate the real-time WebSocket chat system fr
     - Update `_sendMessage` to prioritize WebSocket delivery, falling back to HTTP if necessary.
     - Add UI support for typing indicators (showing when the user is typing).
     - Handle socket connection state (show status if helpful).
+    - Add a `TypingIndicator` widget with a bouncing dots animation that appears when the user is typing.
 
 #### [MODIFY] [message_threads.dart](file:///D:/all%20code/Flutter%20all%20projects/dadu_admin_panel/lib/pages/screens/message_threads.dart)
 - (Optional but recommended) Ensure the threads list also updates or at least refreshes properly when new messages arrive if the socket is global, though the source implementation seems room-specific.

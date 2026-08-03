@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../exceptions/api_exception.dart';
 import '../constants/constants.dart';
 
@@ -168,9 +169,9 @@ class ApiService {
 
   // --- Messaging Methods ---
 
-  Future<List<Map<String, dynamic>>> fetchMessageThreads() async {
+  Future<List<Map<String, dynamic>>> fetchMessageThreads({int page = 1, int limit = 20}) async {
     try {
-      final response = await get('/admin/messages/users');
+      final response = await get('/admin/messages/users?page=$page&limit=$limit');
       if (response != null && response['success'] == true) {
         return List<Map<String, dynamic>>.from(response['threads'] ?? []);
       }
@@ -194,12 +195,142 @@ class ApiService {
     }
   }
 
-  Future<bool> sendReply(String userId, String message) async {
+  /// Helper to resolve relative API URLs (e.g. /images/...) to full absolute URLs
+  static String resolveUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    const String baseUrl = 'https://my-api.sayadulmorsalin123.workers.dev';
+    if (path.startsWith('/')) {
+      return '$baseUrl$path';
+    }
+    return '$baseUrl/$path';
+  }
+
+  /// Upload multiple files (images or documents) to the Cloudflare Worker R2 endpoint
+  Future<List<String>> uploadMultipartFiles(List<File> files, {String folder = 'chat'}) async {
+    if (files.isEmpty) return [];
     try {
-      final response = await post('/messages', body: {
+      final user = _auth.currentUser;
+      final token = await user?.getIdToken();
+
+      final uri = Uri.parse('$_defaultBaseUrl/images/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      request.fields['folder'] = folder;
+
+      for (final file in files) {
+        final stream = http.ByteStream(file.openRead());
+        final length = await file.length();
+        final filename = file.path.split('/').last;
+
+        final multipartFile = http.MultipartFile(
+          'files',
+          stream,
+          length,
+          filename: filename,
+        );
+        request.files.add(multipartFile);
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true) {
+          final List uploadedFiles = decoded['files'] ?? [];
+          final List<String> urls = [];
+          for (final f in uploadedFiles) {
+            final String? relUrl = f['imageUrl'] ?? f['key'];
+            if (relUrl != null && relUrl.isNotEmpty) {
+              urls.add(resolveUrl(relUrl));
+            }
+          }
+          if (urls.isEmpty && decoded['imageUrl'] != null) {
+            urls.add(resolveUrl(decoded['imageUrl']));
+          }
+          return urls;
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService uploadMultipartFiles Error: $e');
+      return [];
+    }
+  }
+
+  /// Upload a voice note file to the Cloudflare Worker R2 endpoint
+  Future<String?> uploadVoiceNote(File voiceNoteFile) async {
+    try {
+      final user = _auth.currentUser;
+      final token = await user?.getIdToken();
+
+      final uri = Uri.parse('$_defaultBaseUrl/images/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      request.fields['folder'] = 'voice-notes';
+
+      final stream = http.ByteStream(voiceNoteFile.openRead());
+      final length = await voiceNoteFile.length();
+      final filename = voiceNoteFile.path.split('/').last.split('\\').last;
+
+      final multipartFile = http.MultipartFile(
+        'voiceNote',
+        stream,
+        length,
+        filename: filename,
+        contentType: MediaType('audio', 'm4a'),
+      );
+      request.files.add(multipartFile);
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true) {
+          final String? relUrl = decoded['imageUrl'] ?? decoded['key'] ?? (decoded['files'] != null && decoded['files'].isNotEmpty ? decoded['files'][0]['imageUrl'] : null);
+          if (relUrl != null && relUrl.isNotEmpty) {
+            return resolveUrl(relUrl);
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('ApiService uploadVoiceNote Error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> sendReply(String userId, String message, {
+    String? imageUrl,
+    String? voiceNoteUrl,
+    String? replyToId,
+    String? replyToText,
+    String? replyToSenderRole,
+  }) async {
+    try {
+      final Map<String, dynamic> body = {
         'userId': userId,
         'message': message,
-      });
+      };
+      if (imageUrl != null) body['imageUrl'] = imageUrl;
+      if (voiceNoteUrl != null) body['voiceNoteUrl'] = voiceNoteUrl;
+      if (replyToId != null) body['replyToId'] = replyToId;
+      if (replyToText != null) body['replyToText'] = replyToText;
+      if (replyToSenderRole != null) body['replyToSenderRole'] = replyToSenderRole;
+
+      final response = await post('/messages', body: body);
       return response != null && response['success'] == true;
     } catch (e) {
       debugPrint('ApiService sendReply Error: $e');
@@ -216,6 +347,31 @@ class ApiService {
       return response != null && response['success'] == true;
     } catch (e) {
       debugPrint('ApiService toggleBlockUser Error: $e');
+      return false;
+    }
+  }
+
+  // --- Admin Review Methods ---
+
+  Future<List<Map<String, dynamic>>> fetchAllReviews() async {
+    try {
+      final response = await get('/admin/reviews');
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['reviews'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchAllReviews Error: $e');
+      return [];
+    }
+  }
+
+  Future<bool> deleteReview(String reviewId) async {
+    try {
+      final response = await delete('/admin/reviews/$reviewId');
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService deleteReview Error: $e');
       return false;
     }
   }

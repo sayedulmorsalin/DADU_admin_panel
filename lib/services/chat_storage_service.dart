@@ -35,4 +35,26 @@ class ChatStorageService {
     }
     return results;
   }
+
+  // --- Pinning Methods ---
+  static const String _pinKey = 'chat_pinned_users';
+
+  /// Returns a set of pinned user IDs.
+  static Future<Set<String>> getPinnedUsers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> pinned = prefs.getStringList(_pinKey) ?? [];
+    return pinned.toSet();
+  }
+
+  /// Pins or unpins a user.
+  static Future<void> togglePin(String userId, bool pin) async {
+    final prefs = await SharedPreferences.getInstance();
+    final Set<String> pinned = (prefs.getStringList(_pinKey) ?? []).toSet();
+    if (pin) {
+      pinned.add(userId);
+    } else {
+      pinned.remove(userId);
+    }
+    await prefs.setStringList(_pinKey, pinned.toList());
+  }
 }

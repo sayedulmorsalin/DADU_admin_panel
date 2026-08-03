@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
 
@@ -44,6 +43,35 @@ class ImageUploadService {
     } catch (e) {
       return '';
     }
+  }
+
+  /// Upload chat image
+  Future<String> uploadChatImage(File image) async {
+    final urls = await ApiService().uploadMultipartFiles([image], folder: 'chat');
+    if (urls.isNotEmpty) return urls.first;
+    // Fallback to S3 direct upload if backend upload doesn't return URL
+    final bytes = await _compressImage(image, 50);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return await _uploadToR2(bytes, 'chat_$timestamp.jpg');
+  }
+
+  /// Upload multiple chat images via Cloudflare Worker R2 endpoint
+  Future<List<String>> uploadMultipleChatImages(List<File> images) async {
+    if (images.isEmpty) return [];
+    final urls = await ApiService().uploadMultipartFiles(images, folder: 'chat');
+    if (urls.isNotEmpty) return urls;
+    // Fallback to uploading individually
+    final List<String> fallbackUrls = [];
+    for (final img in images) {
+      final url = await uploadChatImage(img);
+      if (url.isNotEmpty) fallbackUrls.add(url);
+    }
+    return fallbackUrls;
+  }
+
+  /// Upload chat voice note via Cloudflare Worker R2 endpoint
+  Future<String?> uploadVoiceNote(File voiceNoteFile) async {
+    return await ApiService().uploadVoiceNote(voiceNoteFile);
   }
 
   /// Delete image
@@ -126,17 +154,19 @@ class ImageUploadService {
     return '$_publicBaseUrl/${Uri.encodeComponent(fileName)}';
   }
 
-  /// Delete from R2
+  /// Delete from Cloudflare R2
   Future<void> _deleteFromR2(String objectKey) async {
     final endpoint =
         'https://$_accountId.r2.cloudflarestorage.com/$_bucketName/${Uri.encodeComponent(objectKey)}';
 
     final date = DateFormat('yyyyMMdd').format(DateTime.now().toUtc());
     final datetime =
-    DateFormat("yyyyMMdd'T'HHmmss'Z'").format(DateTime.now().toUtc());
+        DateFormat("yyyyMMdd'T'HHmmss'Z'").format(DateTime.now().toUtc());
     const region = "auto";
 
-    final contentHash = sha256.convert([]).toString();
+    // SHA256 hash of empty string payload for DELETE requests
+    const contentHash =
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
     final canonicalHeaders = [
       'host:$_accountId.r2.cloudflarestorage.com',
@@ -145,7 +175,7 @@ class ImageUploadService {
     ]..sort();
 
     final signedHeaders =
-    canonicalHeaders.map((e) => e.split(':')[0]).join(';');
+        canonicalHeaders.map((e) => e.split(':')[0]).join(';');
 
     final canonicalRequest = [
       'DELETE',
@@ -175,8 +205,8 @@ class ImageUploadService {
       'x-amz-content-sha256': contentHash,
       'x-amz-date': datetime,
       'Authorization':
-      'AWS4-HMAC-SHA256 Credential=$_accessKey/$credentialScope, '
-          'SignedHeaders=$signedHeaders, Signature=$signature',
+          'AWS4-HMAC-SHA256 Credential=$_accessKey/$credentialScope, '
+              'SignedHeaders=$signedHeaders, Signature=$signature',
     };
 
     await ApiService().delete(endpoint, headers: headers);

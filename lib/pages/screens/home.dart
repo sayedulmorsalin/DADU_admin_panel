@@ -11,6 +11,7 @@ import 'package:dadu_admin_panel/pages/screens/update_payment.dart';
 import 'package:dadu_admin_panel/pages/screens/verify.dart';
 import 'package:dadu_admin_panel/pages/screens/receive.dart';
 import 'package:dadu_admin_panel/pages/screens/message_threads.dart';
+import 'package:dadu_admin_panel/pages/screens/admin_reviews_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -387,6 +388,13 @@ class _AdminHomeState extends State<AdminHome> {
                 color: Colors.pink.shade700,
                 onPressed: () => _navigateToMessages(context),
               ),
+              _buildActionButton(
+                icon: Icons.rate_review,
+                label: "Reviews",
+                count: null,
+                color: Colors.amber.shade800,
+                onPressed: () => _navigateToReviews(context),
+              ),
             ],
           ),
           const SizedBox(height: 15),
@@ -699,6 +707,13 @@ class _AdminHomeState extends State<AdminHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const MessageThreadsPage()),
+    );
+  }
+
+  void _navigateToReviews(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AdminReviewsScreen()),
     );
   }
 }

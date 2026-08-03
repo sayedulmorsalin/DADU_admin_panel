@@ -27,6 +27,36 @@ class _ManageProductPageState extends State<ManageProductPage> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
 
+  String _activeBrandFilter = 'All';
+  String _activeCategoryFilter = 'All';
+
+  final List<String> filterBrands = [
+    'All',
+    'Adidas',
+    'Nike',
+    'Puma',
+    'Dadu',
+    'Mizuno',
+    'Others',
+  ];
+
+  final List<String> filterCategories = [
+    'All',
+    'Boots Master Grade',
+    'Boots Master Grade Copy',
+    'Boots Copy 4 Grade',
+    'Boots China Copy',
+    'Boots Turf',
+    'Gloves',
+    'Jersey',
+    'Pant',
+    'Bag',
+    'Safe Guard',
+    'Socks',
+    'Combo Pack',
+    'Others',
+  ];
+
   final List<String> brands = [
     'Adidas',
     'Nike',
@@ -120,47 +150,65 @@ class _ManageProductPageState extends State<ManageProductPage> {
   }
 
   void _onSearchChanged() {
-    _searchProducts(_searchController.text);
+    _applyFilters();
   }
 
-  void _searchProducts(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        filteredProducts = products;
-      });
-      return;
+  void _onBrandFilterSelected(String brand) {
+    setState(() {
+      _activeBrandFilter = brand;
+    });
+    _loadProducts();
+  }
+
+  void _onCategoryFilterSelected(String category) {
+    setState(() {
+      _activeCategoryFilter = category;
+    });
+    _loadProducts();
+  }
+
+  /// Returns the brand string to pass to the API, or null if 'All'.
+  String? get _apiBrandFilter => _activeBrandFilter == 'All' ? null : _activeBrandFilter;
+
+  /// Returns the category string to pass to the API, or null if 'All'.
+  String? get _apiCategoryFilter => _activeCategoryFilter == 'All' ? null : _activeCategoryFilter;
+
+  void _applyFilters() {
+    final query = _searchController.text.trim();
+    List<Map<String, dynamic>> resultList = List.from(products);
+
+    // Only apply fuzzy search client-side; brand/category are handled server-side
+    if (query.isNotEmpty) {
+      final fuzzy = Fuzzy<Map<String, dynamic>>(
+        products,
+        options: FuzzyOptions(
+          keys: [
+            WeightedKey(
+              name: 'name',
+              getter: (p) => p['name'] ?? '',
+              weight: 1.0,
+            ),
+            WeightedKey(
+              name: 'brand',
+              getter: (p) => p['brand'] ?? '',
+              weight: 0.7,
+            ),
+            WeightedKey(
+              name: 'details',
+              getter: (p) => p['details'] ?? '',
+              weight: 0.5,
+            ),
+          ],
+          threshold: 0.3,
+        ),
+      );
+      resultList = fuzzy.search(query).map((r) => r.item).toList();
     }
 
-    final fuzzy = Fuzzy<Map<String, dynamic>>(
-      products,
-      options: FuzzyOptions(
-        keys: [
-          WeightedKey(
-            name: 'name',
-            getter: (p) => p['name'] ?? '',
-            weight: 1.0,
-          ),
-          WeightedKey(
-            name: 'brand',
-            getter: (p) => p['brand'] ?? '',
-            weight: 0.7,
-          ),
-          WeightedKey(
-            name: 'details',
-            getter: (p) => p['details'] ?? '',
-            weight: 0.5,
-          ),
-        ],
-        threshold: 0.3,
-      ),
-    );
-
-    final result = fuzzy.search(query);
     setState(() {
-      filteredProducts = result.map((r) => r.item).toList();
+      filteredProducts = resultList;
     });
   }
-
 
   Future<void> _loadProducts() async {
     setState(() {
@@ -168,10 +216,14 @@ class _ManageProductPageState extends State<ManageProductPage> {
       _hasMore = true;
     });
     try {
-      final loadedProducts = await _dbService.getProducts(page: _currentPage);
+      final loadedProducts = await _dbService.getProducts(
+        page: _currentPage,
+        brand: _apiBrandFilter,
+        category: _apiCategoryFilter,
+      );
       setState(() {
         products = loadedProducts;
-        filteredProducts = loadedProducts;
+        _applyFilters();
         if (loadedProducts.length < 20) {
           _hasMore = false;
         }
@@ -190,7 +242,11 @@ class _ManageProductPageState extends State<ManageProductPage> {
 
     try {
       final nextPage = _currentPage + 1;
-      final loadedProducts = await _dbService.getProducts(page: nextPage);
+      final loadedProducts = await _dbService.getProducts(
+        page: nextPage,
+        brand: _apiBrandFilter,
+        category: _apiCategoryFilter,
+      );
 
       setState(() {
         if (loadedProducts.isEmpty) {
@@ -201,9 +257,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
           if (loadedProducts.length < 20) {
             _hasMore = false;
           }
-          if (_searchController.text.isEmpty) {
-            filteredProducts = List.from(products);
-          }
+          _applyFilters();
         }
         _isLoadingMore = false;
       });
@@ -547,7 +601,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
           if (index != -1) {
             products[index] = updatedProduct;
           }
-          _searchProducts(_searchController.text);
+          _applyFilters();
         });
         Navigator.pop(context);
         _showSnackBar("Product updated successfully!");
@@ -659,7 +713,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
 
                     setState(() {
                       products.removeWhere((p) => p['id'] == productId);
-                      _searchProducts(_searchController.text);
+                      _applyFilters();
                     });
 
                     Navigator.pop(context);
@@ -965,7 +1019,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
       setState(() {
         final product = {...newProduct, 'id': docRef.id};
         products.insert(0, product);
-        _searchProducts(_searchController.text);
+        _applyFilters();
       });
 
       Navigator.pop(context);
@@ -1048,6 +1102,117 @@ class _ManageProductPageState extends State<ManageProductPage> {
     );
   }
 
+  Widget _buildFilterSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Brand Filter Bar
+        Padding(
+          padding: const EdgeInsets.only(left: 16.0, top: 4.0, bottom: 4.0),
+          child: Text(
+            "Brand Filter",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 38,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: filterBrands.length,
+            itemBuilder: (context, index) {
+              final brand = filterBrands[index];
+              final isSelected = _activeBrandFilter == brand;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FilterChip(
+                  label: Text(brand),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    _onBrandFilterSelected(brand);
+                  },
+                  selectedColor: Colors.blue[800],
+                  backgroundColor: Colors.grey[200],
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black87,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 12,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  showCheckmark: false,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isSelected ? Colors.blue[800]! : Colors.transparent,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 6),
+
+        // Category Filter Bar
+        Padding(
+          padding: const EdgeInsets.only(left: 16.0, top: 2.0, bottom: 4.0),
+          child: Text(
+            "Category Filter",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 38,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: filterCategories.length,
+            itemBuilder: (context, index) {
+              final category = filterCategories[index];
+              final isSelected = _activeCategoryFilter == category;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FilterChip(
+                  label: Text(category),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    _onCategoryFilterSelected(category);
+                  },
+                  selectedColor: Colors.blue[800],
+                  backgroundColor: Colors.grey[200],
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black87,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 12,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  showCheckmark: false,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isSelected ? Colors.blue[800]! : Colors.transparent,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1063,22 +1228,23 @@ class _ManageProductPageState extends State<ManageProductPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: "Search products...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 8.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: "Search products...",
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
-                filled: true,
-                fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
             ),
-          ),
-          Expanded(
+            _buildFilterSection(),
+            Expanded(
             child:
                 filteredProducts.isEmpty
                     ? const Center(child: Text("No products found"))

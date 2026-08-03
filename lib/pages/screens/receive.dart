@@ -144,6 +144,7 @@ class _ReceivePageState extends State<ReceivePage> {
     }
 
     addValue(order['order_id']);
+    addValue(order['transactionId']);
     addValue(order['customerName']);
     addValue(order['user_name']);
     addValue(order['customerEmail']);
@@ -337,6 +338,15 @@ class _ReceivePageState extends State<ReceivePage> {
                                                           color: Colors.blue,
                                                         ),
                                                       ),
+                                                      if (order['transactionId'] != null)
+                                                        buildSafeText(
+                                                          "Transaction ID",
+                                                          order['transactionId'],
+                                                          style: const TextStyle(
+                                                            color: Colors.teal,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
                                                     ],
                                                   ),
                                                   Icon(isExpanded
@@ -549,6 +559,13 @@ class _ReceivePageState extends State<ReceivePage> {
     Map<String, dynamic> order,
     String userEmail,
   ) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
@@ -561,18 +578,20 @@ class _ReceivePageState extends State<ReceivePage> {
       await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Canceled',
-        body: 'Your order $orderLabel has been canceled. Please contact support for more details.',
+        body:
+            'Your order $orderLabel has been canceled. Please contact support for more details.',
       );
 
+      if (mounted) Navigator.pop(context); // Close loading dialog
+
       setState(() {
-        orders.removeWhere(
-          (item) => item['order_id'] == order['order_id'],
-        );
+        orders.removeWhere((item) => item['order_id'] == order['order_id']);
       });
       _scaffoldMessengerKey.currentState!.showSnackBar(
         const SnackBar(content: Text("Order canceled successfully")),
       );
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Close loading dialog
       _scaffoldMessengerKey.currentState!.showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
@@ -583,6 +602,13 @@ class _ReceivePageState extends State<ReceivePage> {
     Map<String, dynamic> order,
     String userEmail,
   ) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
@@ -603,19 +629,21 @@ class _ReceivePageState extends State<ReceivePage> {
       await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Delivered',
-        body: 'Congratulations! Your order $orderLabel has been delivered successfully. Thank you for shopping with us!',
+        body:
+            'Congratulations! Your order $orderLabel has been delivered successfully. Thank you for shopping with us!',
       );
 
+      if (mounted) Navigator.pop(context); // Close loading dialog
+
       setState(() {
-        orders.removeWhere(
-          (item) => item['order_id'] == order['order_id'],
-        );
+        orders.removeWhere((item) => item['order_id'] == order['order_id']);
       });
 
       _scaffoldMessengerKey.currentState!.showSnackBar(
         const SnackBar(content: Text("Order marked as Delivered")),
       );
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Close loading dialog
       _scaffoldMessengerKey.currentState!.showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );

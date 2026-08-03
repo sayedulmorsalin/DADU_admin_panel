@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -42,25 +41,50 @@ class ChatSocketService {
       final String? token = await user.getIdToken();
       if (token == null) return;
 
-      // Convert https to wss and http to ws
-      String wsUrl = apiBaseUrl.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://');
-      
-      final uri = Uri.parse('$wsUrl/ws/$_currentUserId');
+      List<String> candidateBases = [
+        apiBaseUrl,
+        'https://my-api.sayadulmorsalin123.workers.dev',
+        'https://api.dadubd.com',
+      ].toSet().toList();
 
-      debugPrint('Connecting to WebSocket: $uri');
+      bool connected = false;
 
-      _channel = IOWebSocketChannel.connect(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-        pingInterval: const Duration(seconds: 20),
-      );
-      
-      isConnected.value = true;
-      _listen();
+      for (String baseUrl in candidateBases) {
+        try {
+          String wsUrl = baseUrl.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://');
+          if (wsUrl.endsWith('/')) {
+            wsUrl = wsUrl.substring(0, wsUrl.length - 1);
+          }
+          final uri = Uri.parse('$wsUrl/ws/$_currentUserId');
+
+          debugPrint('Connecting to WebSocket: $uri');
+
+          final channel = IOWebSocketChannel.connect(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $token',
+            },
+            pingInterval: const Duration(seconds: 20),
+          );
+
+          await channel.ready.timeout(const Duration(seconds: 4));
+
+          _channel = channel;
+          isConnected.value = true;
+          connected = true;
+          _listen();
+          break;
+        } catch (e) {
+          debugPrint('WebSocket connection failed for $baseUrl: $e');
+        }
+      }
+
+      if (!connected) {
+        isConnected.value = false;
+        _scheduleReconnect();
+      }
     } catch (e) {
-      debugPrint('WebSocket connection error: $e');
+      debugPrint('WebSocket Auth error: $e');
       isConnected.value = false;
       _scheduleReconnect();
     }
@@ -76,11 +100,12 @@ class ChatSocketService {
             _messageController.add(event);
           } else if (event['type'] == 'typing') {
             // In admin panel, we want to know if the USER is typing
-            if (event['senderRole'] == 'user') {
+            // The backend might send 'user' or 'customer' depending on consistency
+            if (event['senderRole'] != 'admin') {
               isTyping.value = true;
             }
           } else if (event['type'] == 'stop_typing') {
-            if (event['senderRole'] == 'user') {
+            if (event['senderRole'] != 'admin') {
               isTyping.value = false;
             }
           } else if (event['type'] == 'error') {
@@ -103,7 +128,7 @@ class ChatSocketService {
     );
   }
 
-  void sendMessage(String message, {String? imageUrl}) {
+  void sendMessage(String message, {String? imageUrl, String? voiceNoteUrl, String? replyToId, String? replyToText, String? replyToSenderRole}) {
     if (_channel == null || !isConnected.value) {
       debugPrint('Cannot send message: WebSocket not connected');
       return;
@@ -112,7 +137,11 @@ class ChatSocketService {
     final data = {
       'type': 'message',
       'message': message,
-      'imageUrl': imageUrl,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (voiceNoteUrl != null) 'voiceNoteUrl': voiceNoteUrl,
+      if (replyToId != null) 'replyToId': replyToId,
+      if (replyToText != null) 'replyToText': replyToText,
+      if (replyToSenderRole != null) 'replyToSenderRole': replyToSenderRole,
     };
 
     _channel?.sink.add(jsonEncode(data));

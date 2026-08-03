@@ -1,6 +1,3 @@
-- [ ] Update `ApiService.sendReply` to support `imageUrl`
-- [ ] Add `uploadChatImage` to `ImageUploadService`
-- [ ] Update `AdminChatScreen` UI to display images in message bubbles
-- [ ] Add image picking and preview capability to `AdminChatScreen`
-- [ ] Update `_sendMessage` in `AdminChatScreen` to handle image uploads
-- [ ] Verify functionality
+- [x] Update `Verify` screen to display and search order notes
+- [x] Update `Shipping` screen to display and search order notes
+- [x] Verify changes
