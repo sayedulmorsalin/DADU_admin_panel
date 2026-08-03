@@ -1,0 +1,6 @@
+- [ ] Modify `message_threads.dart` to visually distinguish unread threads
+    - [ ] Add background highlighting for unread threads
+    - [ ] Add unread count badge
+    - [ ] Improve thread list item layout (bold text, message snippet)
+- [ ] Verify the UI changes with a manual check of the code
+- [ ] Create walkthrough artifact
