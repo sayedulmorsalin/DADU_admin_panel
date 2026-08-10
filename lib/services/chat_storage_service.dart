@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+﻿import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatStorageService {
   static const String _prefix = 'chat_last_seen_';
