@@ -77,13 +77,6 @@ class _DeliveredState extends State<Delivered> {
     try { final items = order['items']; if (items is List) return items; return []; } catch (e) { return []; }
   }
 
-  num _safeNum(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value;
-    if (value is String) return num.tryParse(value) ?? 0;
-    return 0;
-  }
-
   Widget buildSafeText(String label, dynamic value, {TextStyle? style}) {
     return Text("$label: ${value?.toString() ?? 'N/A'}", style: style ?? const TextStyle(fontWeight: FontWeight.bold, fontSize: 16));
   }
@@ -119,6 +112,7 @@ class _DeliveredState extends State<Delivered> {
     }
     addValue(order['order_id']);
     addValue(order['transactionId']);
+    addValue(order['moderator']);
     addValue(order['customerName'] ?? order['user_name']);
     addValue(order['customerEmail'] ?? order['user_email']);
     addValue(order['phone'] ?? order['user_phone']);
@@ -129,6 +123,29 @@ class _DeliveredState extends State<Delivered> {
     final items = getItems(order);
     for (final item in items) { if (item is Map<String, dynamic>) { addValue(item['name']); addValue(item['size']); } }
     return _normalizeSearchText(buffer.toString());
+  }
+
+  Widget _buildModeratorBadge(dynamic modValue) {
+    if (modValue == null || modValue.toString().trim().isEmpty) return const SizedBox.shrink();
+    final modStr = modValue.toString().toLowerCase();
+    final bool isMod1 = modStr == 'moderator-1';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMod1 ? Colors.purple.shade100 : Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isMod1 ? Colors.purple : Colors.orange, width: 1.5),
+      ),
+      child: Text(
+        modValue.toString().toUpperCase(),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          color: isMod1 ? Colors.purple.shade900 : Colors.orange.shade900,
+        ),
+      ),
+    );
   }
 
   int _orderSearchScore(Map<String, dynamic> order, String query) {
@@ -197,6 +214,7 @@ class _DeliveredState extends State<Delivered> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 buildSafeText("Order No", index + 1, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.red)),
+                                                _buildModeratorBadge(order['moderator']),
                                                 buildSafeText("Customer Name", order['customerName'] ?? order['user_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                                                 buildSafeText("Phone", order['phone'] ?? order['user_phone'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                                                 buildSafeText("Item Count", items.length, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),

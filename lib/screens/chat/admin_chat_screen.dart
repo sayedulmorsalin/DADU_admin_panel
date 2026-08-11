@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'package:dadu_admin_panel/main.dart';
 import 'package:flutter/material.dart';
@@ -195,8 +195,14 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
           _scrollToBottom();
         }
 
-        // Update local last seen timestamp
+        // Update local last seen timestamp (fast local fallback for immediate UI).
+        final String nowIso = DateTime.now().toUtc().toIso8601String();
         await ChatStorageService.updateLastSeen(widget.userId);
+
+        // Persist read state to DB via WebSocket (real-time sync across devices/admins).
+        // The socket may not be connected yet on first load — sendMarkRead is a no-op
+        // if the socket is not connected, but the REST fallback covers that case.
+        _socketService.sendMarkRead(nowIso);
       }
     } catch (e) {
       debugPrint('Error loading messages: $e');

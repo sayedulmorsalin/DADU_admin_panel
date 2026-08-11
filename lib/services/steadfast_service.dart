@@ -1,7 +1,6 @@
-﻿import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:dadu_admin_panel/services/api_service.dart';
+
 
 class SteadfastService {
   final String _baseUrl = 'https://portal.packzy.com/api/v1';
@@ -66,4 +65,68 @@ class SteadfastService {
     }
     return responseData;
   }
+
+  /// Checks delivery status by Consignment ID, Tracking Code, or Invoice ID.
+  /// Returns status string (e.g. 'delivered', 'cancelled', 'in_review', 'pending', etc.)
+  /// or null if failed / no result found.
+  Future<String?> checkDeliveryStatus({
+    String? consignmentId,
+    String? trackingCode,
+    String? invoice,
+  }) async {
+    final String? apiKey = dotenv.env['steadFast_API_Key'];
+    final String? secretKey = dotenv.env['steadFast_Secret_Key'];
+
+    if (apiKey == null || secretKey == null) {
+      return null;
+    }
+
+    String? endpoint;
+    if (consignmentId != null && consignmentId.toString().trim().isNotEmpty) {
+      endpoint = '$_baseUrl/status_by_cid/${consignmentId.toString().trim()}';
+    } else if (trackingCode != null && trackingCode.toString().trim().isNotEmpty) {
+      endpoint = '$_baseUrl/status_by_trackingcode/${trackingCode.toString().trim()}';
+    } else if (invoice != null && invoice.toString().trim().isNotEmpty) {
+      endpoint = '$_baseUrl/status_by_invoice/${invoice.toString().trim()}';
+    }
+
+    if (endpoint == null) return null;
+
+    try {
+      final responseData = await ApiService().get(
+        endpoint,
+        headers: {
+          'Api-Key': apiKey,
+          'Secret-Key': secretKey,
+        },
+        requireAuth: false,
+      );
+
+      if (responseData is Map) {
+        final status = responseData['status'];
+        if (status == 200 && responseData['delivery_status'] != null) {
+          return responseData['delivery_status'].toString();
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Check delivery status by Consignment ID (/status_by_cid/{id})
+  Future<String?> checkDeliveryStatusByCid(String consignmentId) async {
+    return checkDeliveryStatus(consignmentId: consignmentId);
+  }
+
+  /// Check delivery status by Invoice ID (/status_by_invoice/{invoice})
+  Future<String?> checkDeliveryStatusByInvoice(String invoice) async {
+    return checkDeliveryStatus(invoice: invoice);
+  }
+
+  /// Check delivery status by Tracking Code (/status_by_trackingcode/{trackingCode})
+  Future<String?> checkDeliveryStatusByTrackingCode(String trackingCode) async {
+    return checkDeliveryStatus(trackingCode: trackingCode);
+  }
 }
+

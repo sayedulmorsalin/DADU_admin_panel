@@ -1,9 +1,8 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:clipboard/clipboard.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
-import 'package:dadu_admin_panel/services/image_delete_service.dart';
 
 class Verify extends StatefulWidget {
   const Verify({super.key});
@@ -397,6 +396,8 @@ class _VerifyState extends State<Verify> {
                                         buildCopyableRow("Note", order['note'] ?? 'No note'),
                                         buildSafeText("Time", _getFormattedTime(order)),
                                         buildSafeText("Payment Method", order['paymentMethod']),
+                                        if ((order['refundPhone'] ?? order['refund_number'] ?? '').toString().trim().isNotEmpty)
+                                          buildCopyableRow("Refund Number", (order['refundPhone'] ?? order['refund_number']).toString().trim()),
                                         buildSafeText("Point in account", order['deliveryPoints']),
                                         buildSafeText("Point in use", order['deliveryPointsUsed'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
                                         buildSafeText("Request for free delivery", order['freeDeliveryUsed'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue)),
@@ -443,16 +444,23 @@ class _VerifyState extends State<Verify> {
       final String userEmail = (order['customerEmail'] ?? order['user_email'] ?? '').toString();
       if (userEmail.isEmpty) throw Exception('User email not found for this order');
       final orderLabel = _getNotificationOrderLabel(order);
-      await _databaseService.removeItemsFromVerify(userEmail: userEmail);
+
+      // Move to cancelled (preserves all data + images — no permanent delete)
+      await _databaseService.moveToCancelled(
+        userEmail: userEmail,
+        sourceField: 'to_verify',
+        order: order,
+      );
+
+      // If free delivery was used, reset the flag
       if (order['freeDeliveryUsed'] == true) {
         await _databaseService.updateUserByEmail(userEmail, {'freeDeliveryUsed': false});
-      } else if (order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
       }
+
       await _databaseService.sendPushNotification(email: userEmail, title: 'Order Rejected', body: 'Your order $orderLabel was rejected. Please contact support if you need help.');
       if (mounted) Navigator.pop(context);
       setState(() { orders.removeAt(index); });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order rejected successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order moved to Cancelled')));
     } catch (e) {
       if (mounted) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
@@ -482,7 +490,7 @@ class _VerifyState extends State<Verify> {
       final String userEmail = (order['customerEmail'] ?? order['user_email'] ?? '').toString();
       if (userEmail.isEmpty) throw Exception('User email not found for this order');
       final orderLabel = _getNotificationOrderLabel(order);
-      await _databaseService.moveItemsToShip(userEmail: userEmail, transactionId: transactionId);
+      await _databaseService.moveItemsToShip(userEmail: userEmail, transactionId: transactionId, targetOrder: order);
       if (order['freeDeliveryUsed'] == true) {
         await _databaseService.updateUserByEmail(userEmail, {'free_delivery_info': _safeNum(order['deliveryPoints']) - _safeNum(order['baseDeliveryCharge']), 'freeDeliveryUsed': false});
       }

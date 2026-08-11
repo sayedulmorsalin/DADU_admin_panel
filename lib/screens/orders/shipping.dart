@@ -1,9 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:dadu_admin_panel/services/database_service.dart';
-import 'package:dadu_admin_panel/services/image_delete_service.dart';
 import 'package:dadu_admin_panel/services/steadfast_service.dart';
 
 class Shipping extends StatefulWidget {
@@ -118,12 +117,19 @@ class _ShippingState extends State<Shipping> {
     );
   }
 
+  String _selectedModeratorFilter = 'all';
+
   List<Map<String, dynamic>> get _filteredOrders {
+    List<Map<String, dynamic>> baseList = orders;
+    if (_selectedModeratorFilter != 'all') {
+      baseList = baseList.where((o) => (o['moderator'] ?? '').toString().toLowerCase() == _selectedModeratorFilter).toList();
+    }
+
     final query = _normalizeSearchText(_searchQuery);
-    if (query.isEmpty) return orders;
+    if (query.isEmpty) return baseList;
 
     final scoredOrders =
-        orders
+        baseList
             .map((order) => MapEntry(order, _orderSearchScore(order, query)))
             .where((entry) => entry.value > 0)
             .toList()
@@ -148,6 +154,7 @@ class _ShippingState extends State<Shipping> {
 
     addValue(order['order_id']);
     addValue(order['transactionId']);
+    addValue(order['moderator']);
     addValue(order['customerName']);
     addValue(order['user_name']);
     addValue(order['customerEmail']);
@@ -274,6 +281,52 @@ class _ShippingState extends State<Shipping> {
     }
   }
 
+  Widget _buildFilterChip(String value, String label) {
+    final isSelected = _selectedModeratorFilter == value;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: isSelected ? Colors.white : Colors.black87,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: Colors.deepPurple,
+      backgroundColor: Colors.white,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _selectedModeratorFilter = value;
+          });
+        }
+      },
+    );
+  }
+
+  Widget _buildModeratorBadge(dynamic modValue) {
+    if (modValue == null || modValue.toString().trim().isEmpty) return const SizedBox.shrink();
+    final modStr = modValue.toString().toLowerCase();
+    final bool isMod1 = modStr == 'moderator-1';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMod1 ? Colors.purple.shade100 : Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isMod1 ? Colors.purple : Colors.orange, width: 1.5),
+      ),
+      child: Text(
+        modValue.toString().toUpperCase(),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          color: isMod1 ? Colors.purple.shade900 : Colors.orange.shade900,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleOrders = _filteredOrders;
@@ -325,6 +378,25 @@ class _ShippingState extends State<Shipping> {
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('all', 'All (${orders.length})'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(
+                              'moderator-1',
+                              'Moderator 1 (${orders.where((o) => (o['moderator'] ?? '').toString().toLowerCase() == 'moderator-1').length})',
+                            ),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(
+                              'moderator-2',
+                              'Moderator 2 (${orders.where((o) => (o['moderator'] ?? '').toString().toLowerCase() == 'moderator-2').length})',
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -381,6 +453,7 @@ class _ShippingState extends State<Shipping> {
                                                           color: Colors.red,
                                                         ),
                                                       ),
+                                                      _buildModeratorBadge(order['moderator']),
                                                       buildSafeText(
                                                         "Customer",
                                                         order['customerName'] ??
@@ -671,19 +744,17 @@ class _ShippingState extends State<Shipping> {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
 
-      // Remove order from to_ship array
-      await _databaseService.removeItemsFromShip(userEmail: userEmail);
-
-      // Delete payment proof if not free delivery
-      if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
-      }
+      // Move to cancelled array (preserves all data + images — no permanent delete)
+      await _databaseService.moveToCancelled(
+        userEmail: userEmail,
+        sourceField: 'to_ship',
+        order: order,
+      );
 
       await _databaseService.sendPushNotification(
         email: userEmail,
         title: 'Order Canceled',
-        body:
-            'Your order $orderLabel has been canceled. Please contact support if you have any questions.',
+        body: 'Your order $orderLabel has been canceled. Please contact support if you have any questions.',
       );
 
       if (mounted) Navigator.pop(context); // Close loading dialog
@@ -695,7 +766,7 @@ class _ShippingState extends State<Shipping> {
       });
 
       _scaffoldMessengerKey.currentState!.showSnackBar(
-        const SnackBar(content: Text("Order canceled successfully")),
+        const SnackBar(content: Text("Order moved to Cancelled")),
       );
     } catch (e) {
       if (mounted) Navigator.pop(context); // Close loading dialog
@@ -801,6 +872,8 @@ class _ShippingState extends State<Shipping> {
       }
 
       String trackingCode = '';
+      String consignmentId = '';
+      String invoiceId = invoice;
       try {
         final result = await steadfastService.createOrder(
           invoice: invoice,
@@ -812,15 +885,37 @@ class _ShippingState extends State<Shipping> {
         );
         
         // Extract tracking info according to Steadfast V1 API docs
-        if (result != null) {
-          if (result['consignment'] != null && result['consignment']['tracking_code'] != null) {
-            trackingCode = result['consignment']['tracking_code'].toString();
-          } else if (result['order'] != null && result['order']['tracking_code'] != null) {
-            trackingCode = result['order']['tracking_code'].toString();
-          } else if (result['tracking_code'] != null) {
+        if (result['consignment'] != null) {
+          final cons = result['consignment'];
+          if (cons['tracking_code'] != null) {
+            trackingCode = cons['tracking_code'].toString();
+          }
+          if (cons['consignment_id'] != null) {
+            consignmentId = cons['consignment_id'].toString();
+          }
+          if (cons['invoice'] != null) {
+            invoiceId = cons['invoice'].toString();
+          }
+        } else if (result['order'] != null) {
+          final ord = result['order'];
+          if (ord['tracking_code'] != null) {
+            trackingCode = ord['tracking_code'].toString();
+          }
+          if (ord['consignment_id'] != null) {
+            consignmentId = ord['consignment_id'].toString();
+          }
+          if (ord['invoice'] != null) {
+            invoiceId = ord['invoice'].toString();
+          }
+        } else {
+          if (result['tracking_code'] != null) {
             trackingCode = result['tracking_code'].toString();
           }
+          if (result['consignment_id'] != null) {
+            consignmentId = result['consignment_id'].toString();
+          }
         }
+
       } catch (e) {
         Navigator.pop(context); // Close loading dialog
         _scaffoldMessengerKey.currentState?.showSnackBar(
@@ -830,8 +925,20 @@ class _ShippingState extends State<Shipping> {
       }
       // --- End Steadfast Integration ---
 
-      // Move order to receive
-      await _databaseService.moveItemsToReceive(userEmail: userEmail);
+      // Move order to receive with Steadfast identifiers saved
+      await _databaseService.moveItemsToReceive(
+        userEmail: userEmail,
+        targetOrder: order,
+        extraData: {
+          'consignment_id': consignmentId,
+          'consignmentId': consignmentId,
+          'tracking_code': trackingCode,
+          'trackingCode': trackingCode,
+          'steadfast_invoice': invoiceId,
+          'invoice': invoiceId,
+        },
+      );
+
 
       // Send Notification
       await _databaseService.sendPushNotification(

@@ -1,10 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:dadu_admin_panel/main.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:dadu_admin_panel/services/api_service.dart';
 import 'package:dadu_admin_panel/services/chat_storage_service.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
+import 'package:dadu_admin_panel/services/chat_socket_service.dart';
 import 'package:dadu_admin_panel/screens/chat/admin_chat_screen.dart';
 
 class MessageThreadsPage extends StatefulWidget {
@@ -17,6 +18,7 @@ class MessageThreadsPage extends StatefulWidget {
 class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBindingObserver, RouteAware {
   final ApiService _apiService = ApiService();
   final DatabaseService _dbService = DatabaseService();
+  final ChatSocketService _socketService = ChatSocketService();
   final ScrollController _scrollController = ScrollController();
   
   List<Map<String, dynamic>> _threads = [];
@@ -33,6 +35,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   static const int _limit = 20;
   
   Timer? _refreshTimer;
+  StreamSubscription<Map<String, dynamic>>? _socketSubscription;
 
   @override
   void initState() {
@@ -40,6 +43,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     _loadThreads();
+    _listenToSocketEvents();
   }
 
   void _onScroll() {
@@ -63,6 +67,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     routeObserver.unsubscribe(this);
     _scrollController.dispose();
     _stopPolling();
+    _socketSubscription?.cancel();
     super.dispose();
   }
 
@@ -125,6 +130,27 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     return DateTime.fromMillisecondsSinceEpoch(0).toUtc();
   }
 
+  /// Listens to WebSocket events forwarded through [ChatSocketService].
+  /// When a [thread_read] event arrives (from any admin opening a chat),
+  /// update the local lastSeenMap so the unread badge disappears instantly.
+  void _listenToSocketEvents() {
+    _socketSubscription = _socketService.messageStream.listen((event) {
+      if (!mounted) return;
+      if (event['type'] == 'thread_read') {
+        final String? threadUserId = event['threadUserId']?.toString();
+        final String? lastReadAtStr = event['lastReadAt']?.toString();
+        if (threadUserId != null && lastReadAtStr != null) {
+          try {
+            final DateTime lastReadAt = DateTime.parse(lastReadAtStr).toUtc();
+            setState(() {
+              _lastSeenMap[threadUserId] = lastReadAt;
+            });
+          } catch (_) {}
+        }
+      }
+    });
+  }
+
   Future<void> _loadThreads({bool showLoading = true}) async {
     if (showLoading) {
       setState(() {
@@ -135,15 +161,44 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     try {
       final threads = await _apiService.fetchMessageThreads(page: 1, limit: _limit);
       
-      // Fetch local last seen timestamps and pinned users
+      // Build lastSeenMap: prefer DB lastReadAt from API response,
+      // fall back to local SharedPreferences for threads not yet in DB.
       final userIds = threads.map((t) => (t['uid'] ?? '').toString()).where((id) => id.isNotEmpty).toList();
-      final lastSeen = await ChatStorageService.getAllLastSeen(userIds);
+      final localLastSeen = await ChatStorageService.getAllLastSeen(userIds);
       final pinned = await ChatStorageService.getPinnedUsers();
+
+      // Seed from the current in-memory map first so that any optimistic
+      // read-stamp set before navigation is not lost when we overwrite
+      // _lastSeenMap below (the REST / DB update may still be in-flight).
+      final Map<String, DateTime> mergedLastSeen = Map.from(_lastSeenMap);
+
+      // Layer local SharedPreferences values (prefer the newer timestamp).
+      for (final entry in localLastSeen.entries) {
+        final existing = mergedLastSeen[entry.key];
+        if (existing == null || entry.value.isAfter(existing)) {
+          mergedLastSeen[entry.key] = entry.value;
+        }
+      }
+
+      // Layer DB values from API response (prefer the newer timestamp).
+      for (final t in threads) {
+        final String uid = (t['uid'] ?? '').toString();
+        final dynamic dbLastRead = t['lastReadAt'];
+        if (uid.isNotEmpty && dbLastRead != null) {
+          try {
+            final DateTime dbDate = DateTime.parse(dbLastRead.toString()).toUtc();
+            // DB value wins only if it is newer than what we already have.
+            if (dbDate.isAfter(mergedLastSeen[uid] ?? DateTime.fromMillisecondsSinceEpoch(0).toUtc())) {
+              mergedLastSeen[uid] = dbDate;
+            }
+          } catch (_) {}
+        }
+      }
 
       if (mounted) {
         setState(() {
           _threads = threads;
-          _lastSeenMap = lastSeen;
+          _lastSeenMap = mergedLastSeen;
           _pinnedUserIds = pinned;
           _isLoading = false;
           _currentPage = 1;
@@ -198,9 +253,23 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
         return;
       }
 
-      // Fetch local last seen for new threads
+      // Build lastSeen for new threads — merge DB value with local fallback.
       final newIds = newThreads.map((t) => (t['uid'] ?? '').toString()).where((id) => id.isNotEmpty).toList();
-      final newLastSeen = await ChatStorageService.getAllLastSeen(newIds);
+      final newLocalLastSeen = await ChatStorageService.getAllLastSeen(newIds);
+
+      final Map<String, DateTime> newMergedLastSeen = Map.from(newLocalLastSeen);
+      for (final t in newThreads) {
+        final String uid = (t['uid'] ?? '').toString();
+        final dynamic dbLastRead = t['lastReadAt'];
+        if (uid.isNotEmpty && dbLastRead != null) {
+          try {
+            final DateTime dbDate = DateTime.parse(dbLastRead.toString()).toUtc();
+            if (dbDate.isAfter(newMergedLastSeen[uid] ?? DateTime.fromMillisecondsSinceEpoch(0).toUtc())) {
+              newMergedLastSeen[uid] = dbDate;
+            }
+          } catch (_) {}
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -211,7 +280,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
           final uniqueNew = newThreads.where((t) => !existingIds.contains(t['uid'])).toList();
           
           _threads.addAll(uniqueNew);
-          _lastSeenMap.addAll(newLastSeen);
+          _lastSeenMap.addAll(newMergedLastSeen);
           _hasMore = newThreads.length == _limit;
           _isLoadingMore = false;
           _sortThreads();
@@ -326,7 +395,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                     final int unreadCount = int.tryParse((thread['unreadCount'] ?? thread['unread_count'] ?? thread['unReadCount'] ?? '0').toString()) ?? 0;
                     final String lastSender = (thread['lastMessageSenderRole'] ?? thread['last_sender_role'] ?? thread['role'] ?? thread['senderRole'] ?? '').toString().toLowerCase();
                     
-                    bool isUnread = (unreadCount > 0) || 
+                     bool isUnread = (unreadCount > 0) || 
                                     thread['isUnread'] == true || 
                                     thread['is_unread'] == true || 
                                     thread['status'] == 'unread';
@@ -337,6 +406,13 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                       if (lastSender.isEmpty || (lastSender != 'admin' && lastSender != 'staff')) {
                         isUnread = true;
                       }
+                    }
+
+                    // Override: if admin/staff sent the last message, it's never unread
+                    // (covers the case where the admin just sent a message and the server's
+                    // unreadCount hasn't been reset yet, or lastMessageAt > lastSeenAt by a margin).
+                    if (lastSender == 'admin' || lastSender == 'staff') {
+                      isUnread = false;
                     }
                     
                     final String? lastMessage = thread['lastMessageSnippet'] ?? 
@@ -510,6 +586,16 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                             if (_isSelectionMode) {
                               _toggleSelection(userId);
                             } else {
+                              // Optimistically mark the thread as read locally
+                              // before navigation so the badge disappears immediately.
+                              final String nowIso = DateTime.now().toUtc().toIso8601String();
+                              setState(() {
+                                _lastSeenMap[userId] = DateTime.now().toUtc();
+                              });
+                              // Persist to DB via REST (the WebSocket mark_read is
+                              // sent from AdminChatScreen once the socket is open).
+                              _apiService.markThreadRead(userId, nowIso);
+
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -521,7 +607,20 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                                     isInitialBlocked: isBlocked,
                                   ),
                                 ),
-                              ).then((_) => _loadThreads(showLoading: false));
+                              ).then((_) {
+                                // Re-stamp lastSeenMap after returning so any message
+                                // the admin sent during the chat does not cause a false
+                                // unread badge (their lastMessageAt would otherwise be
+                                // newer than the lastSeenAt captured at tap-time).
+                                final String returnedNowIso = DateTime.now().toUtc().toIso8601String();
+                                if (mounted) {
+                                  setState(() {
+                                    _lastSeenMap[userId] = DateTime.now().toUtc();
+                                  });
+                                }
+                                _apiService.markThreadRead(userId, returnedNowIso);
+                                _loadThreads(showLoading: false);
+                              });
                             }
                           },
                         );

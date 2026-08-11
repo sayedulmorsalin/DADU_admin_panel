@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
+import 'package:dadu_admin_panel/services/image_delete_service.dart';
 
 class CancelledOrders extends StatefulWidget {
   const CancelledOrders({super.key});
@@ -66,8 +68,9 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Deletion'),
-        content: const Text('Are you sure you want to delete this cancelled order?'),
+        title: const Text('Permanently Delete Order'),
+        content: const Text(
+          'This will permanently delete the order and all associated images. This cannot be undone.\n\nAre you sure?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -76,22 +79,144 @@ class _CancelledOrdersState extends State<CancelledOrders> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: const Text('Delete Permanently'),
           ),
         ],
       ),
     );
     if (confirmed == true) {
       try {
+        // Permanently delete Cloudinary image (payment proof)
+        if (order['paymentProof'] != null &&
+            order['paymentProof'].toString().isNotEmpty) {
+          deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
+        }
+        // Remove from Firestore
         await _databaseService.deleteCancelledOrder(
           userDocId: order['user_document_id'],
           orderData: order,
         );
         fetchOrders();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Order permanently deleted.')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting order: $e')),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting order: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _toggleRefundStatus(Map<String, dynamic> order) async {
+    final bool currentStatus = order['isRefunded'] == true;
+    final bool newStatus = !currentStatus;
+
+    final String customerName =
+        (order['customerName'] ?? order['user_name'] ?? 'Customer').toString();
+    final String refundNum = _getRefundNumber(order);
+    final String amount = (order['total'] ?? 'N/A').toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(newStatus ? 'Confirm Money Refund' : 'Unmark Refund Status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              newStatus
+                  ? 'Are you sure you have completed the money refund for this order?'
+                  : 'Are you sure you want to uncheck refund status for this order?',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: newStatus ? Colors.green[50] : Colors.amber[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: newStatus
+                      ? Colors.green.shade300
+                      : Colors.amber.shade300,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Customer: $customerName',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (refundNum.isNotEmpty)
+                    Text('Refund Phone: $refundNum',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[900])),
+                  Text('Total Amount: ৳$amount',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, color: Colors.blue)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  newStatus ? Colors.green[700] : Colors.orange[800],
+              foregroundColor: Colors.white,
+            ),
+            child: Text(newStatus ? 'Yes, Money Refunded' : 'Yes, Unmark'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final userDocId = order['user_document_id']?.toString() ?? '';
+        if (userDocId.isEmpty) throw Exception('User document ID not found');
+
+        await _databaseService.updateCancelledOrderRefundStatus(
+          userDocId: userDocId,
+          orderData: order,
+          isRefunded: newStatus,
         );
+
+        setState(() {
+          order['isRefunded'] = newStatus;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                newStatus
+                    ? 'Order marked as Refunded! ✅'
+                    : 'Refund status updated.',
+              ),
+              backgroundColor: newStatus ? Colors.green[800] : Colors.black87,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error updating refund status: $e')),
+          );
+        }
       }
     }
   }
@@ -114,6 +239,40 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     );
   }
 
+  String _getRefundNumber(Map<String, dynamic> order) {
+    final val = order['refundPhone'] ??
+        order['refund_phone'] ??
+        order['refundNumber'] ??
+        order['refund_number'] ??
+        order['refundAccount'] ??
+        order['refund_account'] ??
+        order['refundMobile'] ??
+        order['refund_mobile'] ??
+        order['bkashNumber'] ??
+        order['bkash_number'] ??
+        order['nagadNumber'] ??
+        order['nagad_number'] ??
+        order['rocketNumber'] ??
+        order['rocket_number'];
+    if (val != null && val.toString().trim().isNotEmpty) {
+      return val.toString().trim();
+    }
+    return '';
+  }
+
+  String _getRefundMethod(Map<String, dynamic> order) {
+    final val = order['refund_method'] ??
+        order['refundMethod'] ??
+        order['refundType'] ??
+        order['refund_type'] ??
+        order['refundProvider'] ??
+        order['refund_provider'];
+    if (val != null && val.toString().trim().isNotEmpty) {
+      return val.toString().trim();
+    }
+    return '';
+  }
+
   String _getFormattedTime(Map<String, dynamic> order) {
     try {
       if (order['timestamp'] != null) {
@@ -127,6 +286,29 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     } catch (e) {
       return 'Invalid date';
     }
+  }
+
+  Widget _buildModeratorBadge(dynamic modValue) {
+    if (modValue == null || modValue.toString().trim().isEmpty) return const SizedBox.shrink();
+    final modStr = modValue.toString().toLowerCase();
+    final bool isMod1 = modStr == 'moderator-1';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMod1 ? Colors.purple.shade100 : Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isMod1 ? Colors.purple : Colors.orange, width: 1.5),
+      ),
+      child: Text(
+        modValue.toString().toUpperCase(),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          color: isMod1 ? Colors.purple.shade900 : Colors.orange.shade900,
+        ),
+      ),
+    );
   }
 
   List<Map<String, dynamic>> get _filteredOrders {
@@ -153,6 +335,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
 
     addValue(order['order_id']);
     addValue(order['transactionId']);
+    addValue(order['moderator']);
     addValue(order['customerName'] ?? order['user_name']);
     addValue(order['customerEmail'] ?? order['user_email']);
     addValue(order['phone'] ?? order['user_phone']);
@@ -161,6 +344,9 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     addValue(order['address']);
     addValue(order['paymentMethod']);
     addValue(order['cancelReason']);
+    addValue(_getRefundNumber(order));
+    addValue(_getRefundMethod(order));
+    if (order['isRefunded'] == true) addValue('refunded');
     final items = getItems(order);
     for (final item in items) {
       if (item is Map<String, dynamic>) {
@@ -323,6 +509,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                                       color: Colors.red,
                                                     ),
                                                   ),
+                                                  _buildModeratorBadge(order['moderator']),
                                                   buildSafeText(
                                                     'Customer Name',
                                                     order['customerName'] ??
@@ -364,6 +551,64 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                                             FontWeight.bold,
                                                       ),
                                                     ),
+                                                  // Refund phone badge shown in header
+                                                  if (_getRefundNumber(order).isNotEmpty)
+                                                    Container(
+                                                      margin: const EdgeInsets.only(top: 6),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.green[50],
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.green.shade400, width: 1.5),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.monetization_on, color: Colors.green[800], size: 18),
+                                                          const SizedBox(width: 6),
+                                                          Flexible(
+                                                            child: Text(
+                                                              'Refund Phone: ${_getRefundNumber(order)}${_getRefundMethod(order).isNotEmpty ? ' (${_getRefundMethod(order)})' : ''}',
+                                                              style: TextStyle(
+                                                                color: Colors.green[900],
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 14,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 8),
+                                                          InkWell(
+                                                            onTap: () {
+                                                              Clipboard.setData(ClipboardData(text: _getRefundNumber(order)));
+                                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                                SnackBar(content: Text('Copied refund number: ${_getRefundNumber(order)}')),
+                                                              );
+                                                            },
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.green[700],
+                                                                borderRadius: BorderRadius.circular(4),
+                                                              ),
+                                                              child: const Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                children: [
+                                                                  Icon(Icons.copy, size: 12, color: Colors.white),
+                                                                  SizedBox(width: 4),
+                                                                  Text(
+                                                                    'Copy',
+                                                                    style: TextStyle(
+                                                                        color: Colors.white,
+                                                                        fontSize: 11,
+                                                                        fontWeight: FontWeight.bold),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
                                                   // Cancel reason shown in collapsed view too
                                                   if (order['cancelReason'] !=
                                                           null &&
@@ -403,13 +648,40 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                                 ],
                                               ),
                                             ),
-                                            Icon(
-                                              isExpanded
-                                                  ? Icons.expand_less
-                                                  : Icons.expand_more,
-                                              color: Colors.red[400],
-                                            ),
-                                          ],
+                                             Column(
+                                               children: [
+                                                 InkWell(
+                                                   onTap: () => _toggleRefundStatus(order),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       Checkbox(
+                                                         value: order['isRefunded'] == true,
+                                                         activeColor: Colors.green[700],
+                                                         onChanged: (_) => _toggleRefundStatus(order),
+                                                       ),
+                                                       Text(
+                                                         order['isRefunded'] == true ? 'REFUNDED ✅' : 'Refund',
+                                                         style: TextStyle(
+                                                           fontWeight: FontWeight.bold,
+                                                           fontSize: 12,
+                                                           color: order['isRefunded'] == true
+                                                               ? Colors.green[800]
+                                                               : Colors.red[800],
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                                 Icon(
+                                                   isExpanded
+                                                       ? Icons.expand_less
+                                                       : Icons.expand_more,
+                                                   color: Colors.red[400],
+                                                 ),
+                                               ],
+                                             ),
+                                           ],
                                         ),
                                       ),
                                       if (isExpanded) ...[
@@ -507,8 +779,51 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                             'Time', _getFormattedTime(order)),
                                         buildSafeText('Payment Method',
                                             order['paymentMethod']),
-                                        buildSafeText('Point in account',
-                                            order['deliveryPoints']),
+                                        if (_getRefundNumber(order).isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    'Refund Phone: ${_getRefundNumber(order)}${_getRefundMethod(order).isNotEmpty ? ' (${_getRefundMethod(order)})' : ''}',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 18,
+                                                      color: Colors.green[800],
+                                                    ),
+                                                  ),
+                                                ),
+                                                ElevatedButton.icon(
+                                                  onPressed: () {
+                                                    Clipboard.setData(ClipboardData(text: _getRefundNumber(order)));
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text('Copied refund number: ${_getRefundNumber(order)}')),
+                                                    );
+                                                  },
+                                                  icon: const Icon(Icons.copy, size: 16),
+                                                  label: const Text('Copy Refund Phone'),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.green[700],
+                                                    foregroundColor: Colors.white,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                          buildSafeText('Refund Phone', 'N/A'),
+                                         buildSafeText(
+                                           'Refund Status',
+                                           order['isRefunded'] == true ? 'COMPLETED ✅' : 'PENDING ⏳',
+                                           style: TextStyle(
+                                             fontWeight: FontWeight.bold,
+                                             fontSize: 18,
+                                             color: order['isRefunded'] == true ? Colors.green[800] : Colors.red[800],
+                                           ),
+                                         ),
+                                         buildSafeText('Point in account',
+                                             order['deliveryPoints']),
                                         buildSafeText(
                                           'Point in use',
                                           order['deliveryPointsUsed'],
@@ -525,7 +840,34 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                               fontSize: 18,
                                               color: Colors.blue),
                                         ),
-                                        Align(
+                                         const SizedBox(height: 8),
+                                         const Text(
+                                           'Payment Proof:',
+                                           style: TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 16),
+                                         ),
+                                         if (order['paymentProof'] != null &&
+                                             order['paymentProof'].toString().isNotEmpty)
+                                           ClipRRect(
+                                             borderRadius: BorderRadius.circular(8),
+                                             child: Image.network(
+                                               order['paymentProof'].toString(),
+                                               width: double.infinity,
+                                               fit: BoxFit.cover,
+                                               loadingBuilder: (context, child, loadingProgress) {
+                                                 if (loadingProgress == null) return child;
+                                                 return const Center(child: CircularProgressIndicator());
+                                               },
+                                               errorBuilder: (context, error, stackTrace) =>
+                                                   const Text('Could not load payment proof image',
+                                                       style: TextStyle(color: Colors.grey)),
+                                             ),
+                                           )
+                                         else
+                                           const Text('No payment proof provided',
+                                               style: TextStyle(color: Colors.grey)),
+                                         Align(
                                           alignment: Alignment.centerRight,
                                           child: IconButton(
                                             icon: const Icon(Icons.delete,

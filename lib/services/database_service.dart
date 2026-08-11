@@ -253,7 +253,39 @@ class DatabaseService {
       if (items != null) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
-            allOrders.add({...item, 'user_document_id': doc.id, 'user_email': data['email'], 'user_name': data['name'], 'user_phone': data['phone']});
+            allOrders.add({
+              ...item,
+              'user_document_id': doc.id,
+              'user_email': data['email'],
+              'user_name': data['name'],
+              'user_phone': data['phone'],
+              'refund_number': item['refund_number'] ??
+                  item['refundNumber'] ??
+                  item['refundPhone'] ??
+                  item['refund_phone'] ??
+                  item['refundAccount'] ??
+                  item['refund_account'] ??
+                  item['refundMobile'] ??
+                  item['refund_mobile'] ??
+                  item['bkash_number'] ??
+                  item['bkashNumber'] ??
+                  item['nagad_number'] ??
+                  item['nagadNumber'] ??
+                  item['rocket_number'] ??
+                  item['rocketNumber'] ??
+                  data['refund_number'] ??
+                  data['refundNumber'] ??
+                  data['refund_phone'] ??
+                  data['refundPhone'],
+              'refund_method': item['refund_method'] ??
+                  item['refundMethod'] ??
+                  item['refundType'] ??
+                  item['refund_type'] ??
+                  item['refundProvider'] ??
+                  item['refund_provider'] ??
+                  data['refund_method'] ??
+                  data['refundMethod'],
+            });
           }
         }
       }
@@ -289,6 +321,40 @@ class DatabaseService {
       final data = (await t.get(ref)).data();
       final cancelled = List<dynamic>.from(data?['cancelled'] ?? []);
       cancelled.removeWhere((o) => o is Map && o['timestamp'] == orderData['timestamp']);
+      t.update(ref, {'cancelled': cancelled});
+    });
+  }
+
+  Future<void> updateCancelledOrderRefundStatus({
+    required String userDocId,
+    required Map<String, dynamic> orderData,
+    required bool isRefunded,
+  }) async {
+    await _db.runTransaction((t) async {
+      final ref = _db.collection('users').doc(userDocId);
+      final docSnap = await t.get(ref);
+      final data = docSnap.data();
+      final cancelled = List<dynamic>.from(data?['cancelled'] ?? []);
+      for (int i = 0; i < cancelled.length; i++) {
+        final item = cancelled[i];
+        if (item is Map) {
+          final bool matchTimestamp = orderData['timestamp'] != null &&
+              item['timestamp'] == orderData['timestamp'];
+          final bool matchOrderId = orderData['order_id'] != null &&
+              item['order_id'] == orderData['order_id'];
+          if (matchTimestamp || matchOrderId) {
+            final updatedMap = Map<String, dynamic>.from(item);
+            updatedMap['isRefunded'] = isRefunded;
+            if (isRefunded) {
+              updatedMap['refundedAt'] = Timestamp.now();
+            } else {
+              updatedMap.remove('refundedAt');
+            }
+            cancelled[i] = updatedMap;
+            break;
+          }
+        }
+      }
       t.update(ref, {'cancelled': cancelled});
     });
   }
@@ -397,33 +463,174 @@ class DatabaseService {
   Future<void> deleteBanner(String id) => _db.collection('banners').doc(id).delete();
   Future<List<Map<String, dynamic>>> getBanners() async => (await _db.collection('banners').get()).docs.map((d) => {'id': d.id, 'imageUrl': d.data()['imageUrl']}).toList();
   
-  Future<void> moveItemsToShip({required String userEmail, String? transactionId}) => 
-      _moveOrder(userEmail, 'to_verify', 'to_ship', extraData: transactionId != null ? {'transactionId': transactionId} : null);
+  Future<void> moveItemsToShip({required String userEmail, String? transactionId, Map<String, dynamic>? targetOrder}) => 
+      _moveOrder(userEmail, 'to_verify', 'to_ship', extraData: transactionId != null ? {'transactionId': transactionId} : null, targetOrder: targetOrder);
   
-  Future<void> moveItemsToReceive({required String userEmail}) => _moveOrder(userEmail, 'to_ship', 'to_receive');
-  Future<void> moveReceiveToCompleted({required String userEmail}) => _moveOrder(userEmail, 'to_receive', 'completed');
+  Future<void> moveItemsToReceive({required String userEmail, Map<String, dynamic>? targetOrder, Map<String, dynamic>? extraData}) => 
+      _moveOrder(userEmail, 'to_ship', 'to_receive', extraData: extraData, targetOrder: targetOrder);
 
-  Future<void> _moveOrder(String email, String from, String to, {Map<String, dynamic>? extraData}) async {
+  Future<void> moveReceiveToCompleted({required String userEmail, Map<String, dynamic>? targetOrder, Map<String, dynamic>? extraData}) => 
+      _moveOrder(userEmail, 'to_receive', 'completed', extraData: extraData, targetOrder: targetOrder);
+
+  Future<void> _moveOrder(
+    String email, 
+    String from, 
+    String to, {
+    Map<String, dynamic>? extraData,
+    Map<String, dynamic>? targetOrder,
+  }) async {
     final s = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
+    if (s.docs.isEmpty) return;
     final ref = s.docs.first.reference;
     await _db.runTransaction((t) async {
-      final data = (await t.get(ref)).data()!;
+      final snap = await t.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data()!;
       final listFrom = List<dynamic>.from(data[from] ?? []);
       final listTo = List<dynamic>.from(data[to] ?? []);
       
-      if (extraData != null) {
-        for (var item in listFrom) {
-          if (item is Map<String, dynamic>) {
-            item.addAll(extraData);
-          }
+      List<dynamic> itemsToMove = [];
+
+      final bool isMovingToShip = (from == 'to_verify' && to == 'to_ship');
+      DocumentReference? modRef;
+      int lastIndex = 2;
+      bool updatedModCounter = false;
+
+      if (isMovingToShip) {
+        modRef = _db.collection('settings').doc('moderator_assignment');
+        final modSnap = await t.get(modRef);
+        final modData = modSnap.data() as Map<String, dynamic>?;
+        if (modSnap.exists && modData != null && modData['lastIndex'] != null) {
+          lastIndex = modData['lastIndex'] as int;
         }
       }
 
-      listTo.addAll(listFrom);
-      t.update(ref, {from: [], to: listTo});
+      String getNextModerator() {
+        lastIndex = (lastIndex == 1) ? 2 : 1;
+        updatedModCounter = true;
+        return 'moderator-$lastIndex';
+      }
+
+      if (targetOrder != null) {
+        final targetId = targetOrder['order_id']?.toString();
+        final targetTimestamp = targetOrder['timestamp'];
+
+        listFrom.removeWhere((item) {
+          if (item is Map) {
+            bool matches = false;
+            if (targetId != null && targetId.isNotEmpty && item['order_id']?.toString() == targetId) {
+              matches = true;
+            } else if (targetTimestamp != null && item['timestamp'] == targetTimestamp) {
+              matches = true;
+            }
+            if (matches) {
+              final mapItem = Map<String, dynamic>.from(item);
+              if (extraData != null) {
+                mapItem.addAll(extraData);
+              }
+              if (isMovingToShip && mapItem['moderator'] == null) {
+                mapItem['moderator'] = getNextModerator();
+              }
+              itemsToMove.add(mapItem);
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (itemsToMove.isEmpty) {
+          final mapItem = Map<String, dynamic>.from(targetOrder);
+          if (extraData != null) {
+            mapItem.addAll(extraData);
+          }
+          if (isMovingToShip && mapItem['moderator'] == null) {
+            mapItem['moderator'] = getNextModerator();
+          }
+          itemsToMove.add(mapItem);
+        }
+      } else {
+        for (var item in listFrom) {
+          if (item is Map<String, dynamic>) {
+            final mapItem = Map<String, dynamic>.from(item);
+            if (extraData != null) {
+              mapItem.addAll(extraData);
+            }
+            if (isMovingToShip && mapItem['moderator'] == null) {
+              mapItem['moderator'] = getNextModerator();
+            }
+            itemsToMove.add(mapItem);
+          } else {
+            itemsToMove.add(item);
+          }
+        }
+        listFrom.clear();
+      }
+
+      if (isMovingToShip && updatedModCounter && modRef != null) {
+        t.set(modRef, {'lastIndex': lastIndex}, SetOptions(merge: true));
+      }
+
+      listTo.addAll(itemsToMove);
+      t.update(ref, {from: listFrom, to: listTo});
     });
   }
 
+  /// Moves an order from [sourceField] (to_verify / to_ship / to_receive)
+  /// into the user's `cancelled` array.  No data or images are deleted.
+  /// A `cancelledAt` timestamp and `cancelledFrom` label are added to the entry.
+  Future<void> moveToCancelled({
+    required String userEmail,
+    required String sourceField, // 'to_verify' | 'to_ship' | 'to_receive'
+    required Map<String, dynamic> order,
+    String? cancelReason,
+  }) async {
+    final snap = await _db
+        .collection('users')
+        .where('email', isEqualTo: userEmail)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return;
+
+    final ref = snap.docs.first.reference;
+
+    await _db.runTransaction((t) async {
+      final docSnap = await t.get(ref);
+      final data = docSnap.data() ?? {};
+
+      final sourceList = List<dynamic>.from(data[sourceField] ?? []);
+      final targetId = order['order_id']?.toString();
+      final targetTimestamp = order['timestamp'];
+
+      sourceList.removeWhere((o) {
+        if (o is Map) {
+          if (targetId != null && targetId.isNotEmpty && o['order_id']?.toString() == targetId) {
+            return true;
+          }
+          if (targetTimestamp != null && o['timestamp'] == targetTimestamp) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      final Map<String, dynamic> updates = {sourceField: sourceList};
+
+      final cancelled = List<dynamic>.from(data['cancelled'] ?? []);
+      final enriched = Map<String, dynamic>.from(order);
+      enriched['cancelledAt'] = Timestamp.now();
+      enriched['cancelledFrom'] = sourceField;
+      if (cancelReason != null && cancelReason.isNotEmpty) {
+        enriched['cancelReason'] = cancelReason;
+      }
+      cancelled.add(enriched);
+      updates['cancelled'] = cancelled;
+
+      t.update(ref, updates);
+    });
+  }
+
+
+  // Legacy wrappers kept for any other callers — now delegate to moveToCancelled
   Future<void> removeItemsFromVerify({required String userEmail}) async {
     final s = await _db.collection('users').where('email', isEqualTo: userEmail).limit(1).get();
     if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_verify': []});
@@ -438,6 +645,7 @@ class DatabaseService {
     final s = await _db.collection('users').where('email', isEqualTo: userEmail).limit(1).get();
     if (s.docs.isNotEmpty) await s.docs.first.reference.update({'to_receive': []});
   }
+
 
   Future<void> sendPushNotification({
     required String email,

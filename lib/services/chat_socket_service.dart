@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -98,6 +98,9 @@ class ChatSocketService {
           
           if (event['type'] == 'new_message') {
             _messageController.add(event);
+          } else if (event['type'] == 'thread_read') {
+            // Broadcast so MessageThreadsPage can update unread badge immediately.
+            _messageController.add(event);
           } else if (event['type'] == 'typing') {
             // In admin panel, we want to know if the USER is typing
             // The backend might send 'user' or 'customer' depending on consistency
@@ -156,6 +159,20 @@ class ChatSocketService {
   void sendStopTyping() {
     if (_channel != null && isConnected.value) {
       _channel?.sink.add(jsonEncode({'type': 'stop_typing'}));
+    }
+  }
+
+  /// Sends a mark_read event over the WebSocket.
+  /// The backend upserts admin_thread_reads in D1 and broadcasts
+  /// a thread_read event to all sockets in the room.
+  ///
+  /// [lastReadAt] should be an ISO-8601 UTC string (e.g. DateTime.now().toUtc().toIso8601String()).
+  void sendMarkRead(String lastReadAt) {
+    if (_channel != null && isConnected.value) {
+      _channel?.sink.add(jsonEncode({
+        'type': 'mark_read',
+        'lastReadAt': lastReadAt,
+      }));
     }
   }
 

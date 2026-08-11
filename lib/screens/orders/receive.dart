@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:dadu_admin_panel/services/database_service.dart';
-import 'package:dadu_admin_panel/services/image_delete_service.dart';
+import 'package:dadu_admin_panel/services/steadfast_service.dart';
 
 class ReceivePage extends StatefulWidget {
   const ReceivePage({super.key});
@@ -22,6 +22,7 @@ class _ReceivePageState extends State<ReceivePage> {
   List<Map<String, dynamic>> orders = [];
   bool isLoading = true;
   String _searchQuery = '';
+  bool _isCheckingStatuses = false;
 
   @override
   void initState() {
@@ -60,6 +61,9 @@ class _ReceivePageState extends State<ReceivePage> {
         orders = data;
         isLoading = false;
       });
+
+      // Automatically check Steadfast status for each received order
+      _checkSteadfastStatusForOrders(data);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -67,6 +71,219 @@ class _ReceivePageState extends State<ReceivePage> {
       });
       _scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(content: Text("Failed to load orders: $e")),
+      );
+    }
+  }
+
+  Future<void> _checkSteadfastStatusForOrders(
+      List<Map<String, dynamic>> orderList) async {
+    if (_isCheckingStatuses) return;
+    _isCheckingStatuses = true;
+
+    final SteadfastService steadfastService = SteadfastService();
+    final List<Map<String, dynamic>> targets = List.from(orderList);
+
+    for (final order in targets) {
+      if (!mounted) break;
+
+      final String? consignmentId =
+          (order['consignment_id'] ?? order['consignmentId'])?.toString();
+      final String? trackingCode =
+          (order['tracking_code'] ?? order['trackingCode'])?.toString();
+      final String? invoice = (order['steadfast_invoice'] ??
+              order['invoice'] ??
+              order['order_id'])
+          ?.toString();
+
+      // If there is no data for search, don't do anything (manual check & update)
+      if ((consignmentId == null || consignmentId.trim().isEmpty) &&
+          (trackingCode == null || trackingCode.trim().isEmpty) &&
+          (invoice == null || invoice.trim().isEmpty)) {
+        continue;
+      }
+
+      final String? deliveryStatus = await steadfastService.checkDeliveryStatus(
+        consignmentId: consignmentId,
+        trackingCode: trackingCode,
+        invoice: invoice,
+      );
+
+      // If did not get any result, don't do anything
+      if (deliveryStatus == null) {
+        continue;
+      }
+
+      final statusLower = deliveryStatus.trim().toLowerCase();
+      final userEmail =
+          (order['customerEmail'] ?? order['user_email'])?.toString() ?? '';
+
+      if (userEmail.isEmpty) continue;
+
+      if (statusLower == 'delivered' || statusLower == 'partial_delivered') {
+        // Status changed to delivered -> move to delivered
+        await _autoMoveToDelivered(order, userEmail);
+      } else if (statusLower == 'cancelled') {
+        // Status changed to cancel -> move to cancel page
+        await _autoMoveToCancelled(order, userEmail);
+      } else {
+        // Status is other (in_review, pending, hold, etc.) -> don't do anything
+        continue;
+      }
+    }
+
+    _isCheckingStatuses = false;
+  }
+
+  Future<void> _autoMoveToDelivered(
+    Map<String, dynamic> order,
+    String userEmail,
+  ) async {
+    try {
+      final orderLabel = _getNotificationOrderLabel(order);
+
+      await _databaseService.moveReceiveToCompleted(
+        userEmail: userEmail,
+        targetOrder: order,
+      );
+
+      await _databaseService.recordSale(order);
+
+      num totalFreeCoins = _safeNum(order['totalFreeCoins']);
+      if (totalFreeCoins > 0) {
+        await _databaseService.updateUserByEmail(userEmail, {
+          'free_delivery_info': FieldValue.increment(totalFreeCoins),
+        });
+      }
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Delivered',
+        body:
+            'Congratulations! Your order $orderLabel has been delivered successfully. Thank you for shopping with us!',
+      );
+
+      if (mounted) {
+        setState(() {
+          orders.removeWhere((item) {
+            final matchId = order['order_id'] != null &&
+                item['order_id']?.toString() == order['order_id']?.toString();
+            final matchTs = order['timestamp'] != null &&
+                item['timestamp'] == order['timestamp'];
+            return matchId || matchTs;
+          });
+        });
+
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              "Order $orderLabel status is delivered on Steadfast -> Moved to Delivered",
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Auto move to delivered error: $e");
+    }
+  }
+
+  Future<void> _autoMoveToCancelled(
+    Map<String, dynamic> order,
+    String userEmail,
+  ) async {
+    try {
+      final orderLabel = _getNotificationOrderLabel(order);
+
+      await _databaseService.moveToCancelled(
+        userEmail: userEmail,
+        sourceField: 'to_receive',
+        order: order,
+        cancelReason: 'Cancelled on Steadfast Courier',
+      );
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Order Canceled',
+        body:
+            'Your order $orderLabel has been canceled by Steadfast Courier. Please contact support for more details.',
+      );
+
+      if (mounted) {
+        setState(() {
+          orders.removeWhere((item) {
+            final matchId = order['order_id'] != null &&
+                item['order_id']?.toString() == order['order_id']?.toString();
+            final matchTs = order['timestamp'] != null &&
+                item['timestamp'] == order['timestamp'];
+            return matchId || matchTs;
+          });
+        });
+
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              "Order $orderLabel status is cancelled on Steadfast -> Moved to Cancelled",
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Auto move to cancelled error: $e");
+    }
+  }
+
+  Future<void> _checkSingleOrderSteadfastStatus(Map<String, dynamic> order) async {
+    final String? consignmentId =
+        (order['consignment_id'] ?? order['consignmentId'])?.toString();
+    final String? trackingCode =
+        (order['tracking_code'] ?? order['trackingCode'])?.toString();
+    final String? invoice = (order['steadfast_invoice'] ??
+            order['invoice'] ??
+            order['order_id'])
+        ?.toString();
+
+    if ((consignmentId == null || consignmentId.trim().isEmpty) &&
+        (trackingCode == null || trackingCode.trim().isEmpty) &&
+        (invoice == null || invoice.trim().isEmpty)) {
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+            content: Text("No Steadfast tracking data found for this order.")),
+      );
+      return;
+    }
+
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text("Checking Steadfast status...")),
+    );
+
+    final SteadfastService steadfastService = SteadfastService();
+    final String? status = await steadfastService.checkDeliveryStatus(
+      consignmentId: consignmentId,
+      trackingCode: trackingCode,
+      invoice: invoice,
+    );
+
+    if (status == null) {
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text("Could not retrieve status from Steadfast.")),
+      );
+      return;
+    }
+
+    final statusLower = status.trim().toLowerCase();
+    final userEmail =
+        (order['customerEmail'] ?? order['user_email'])?.toString() ?? '';
+
+    if (statusLower == 'delivered' || statusLower == 'partial_delivered') {
+      if (userEmail.isNotEmpty) {
+        await _autoMoveToDelivered(order, userEmail);
+      }
+    } else if (statusLower == 'cancelled') {
+      if (userEmail.isNotEmpty) {
+        await _autoMoveToCancelled(order, userEmail);
+      }
+    } else {
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text("Steadfast Status: $status (No auto action needed)")),
       );
     }
   }
@@ -115,6 +332,29 @@ class _ReceivePageState extends State<ReceivePage> {
     );
   }
 
+  Widget _buildModeratorBadge(dynamic modValue) {
+    if (modValue == null || modValue.toString().trim().isEmpty) return const SizedBox.shrink();
+    final modStr = modValue.toString().toLowerCase();
+    final bool isMod1 = modStr == 'moderator-1';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isMod1 ? Colors.purple.shade100 : Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isMod1 ? Colors.purple : Colors.orange, width: 1.5),
+      ),
+      child: Text(
+        modValue.toString().toUpperCase(),
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          color: isMod1 ? Colors.purple.shade900 : Colors.orange.shade900,
+        ),
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> get _filteredOrders {
     final query = _normalizeSearchText(_searchQuery);
     if (query.isEmpty) return orders;
@@ -145,6 +385,7 @@ class _ReceivePageState extends State<ReceivePage> {
 
     addValue(order['order_id']);
     addValue(order['transactionId']);
+    addValue(order['moderator']);
     addValue(order['customerName']);
     addValue(order['user_name']);
     addValue(order['customerEmail']);
@@ -155,6 +396,10 @@ class _ReceivePageState extends State<ReceivePage> {
     addValue(order['thana']);
     addValue(order['address']);
     addValue(order['paymentMethod']);
+    addValue(order['tracking_code']);
+    addValue(order['trackingCode']);
+    addValue(order['consignment_id']);
+    addValue(order['consignmentId']);
 
     final items = getItems(order);
     for (final item in items) {
@@ -218,6 +463,13 @@ class _ReceivePageState extends State<ReceivePage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26),
           ),
           backgroundColor: const Color.fromARGB(255, 204, 223, 232),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh & Check Steadfast Statuses',
+              icon: const Icon(Icons.refresh),
+              onPressed: fetchOrders,
+            ),
+          ],
         ),
         body:
             isLoading
@@ -235,20 +487,20 @@ class _ReceivePageState extends State<ReceivePage> {
                         },
                         decoration: InputDecoration(
                           hintText:
-                              'Search orders, customers, items, district...',
+                              'Search orders, tracking code, customers, items...',
                           prefixIcon: const Icon(Icons.search),
                           suffixIcon:
                               _searchQuery.isEmpty
                                   ? null
                                   : IconButton(
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() {
-                                        _searchQuery = '';
-                                      });
-                                    },
-                                    icon: const Icon(Icons.clear),
-                                  ),
+                                     onPressed: () {
+                                       _searchController.clear();
+                                       setState(() {
+                                         _searchQuery = '';
+                                       });
+                                     },
+                                     icon: const Icon(Icons.clear),
+                                   ),
                           filled: true,
                           fillColor: Colors.white,
                           border: OutlineInputBorder(
@@ -285,6 +537,9 @@ class _ReceivePageState extends State<ReceivePage> {
 
                                     final bool isExpanded = _expandedIndices.contains(index);
 
+                                    final String? trackingCode = (order['tracking_code'] ?? order['trackingCode'])?.toString();
+                                    final String? consignmentId = (order['consignment_id'] ?? order['consignmentId'])?.toString();
+
                                     return Card(
                                       margin: const EdgeInsets.only(bottom: 10),
                                       elevation: 3,
@@ -311,6 +566,7 @@ class _ReceivePageState extends State<ReceivePage> {
                                                           color: Colors.red,
                                                         ),
                                                       ),
+                                                      _buildModeratorBadge(order['moderator']),
                                                       buildSafeText(
                                                         "Customer",
                                                         order['customerName'] ??
@@ -329,6 +585,24 @@ class _ReceivePageState extends State<ReceivePage> {
                                                           fontSize: 20,
                                                         ),
                                                       ),
+                                                      if (trackingCode != null && trackingCode.isNotEmpty)
+                                                        buildSafeText(
+                                                          "Tracking Code",
+                                                          trackingCode,
+                                                          style: const TextStyle(
+                                                            color: Colors.indigo,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      if (consignmentId != null && consignmentId.isNotEmpty)
+                                                        buildSafeText(
+                                                          "Consignment ID",
+                                                          consignmentId,
+                                                          style: const TextStyle(
+                                                            color: Colors.deepPurple,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
                                                       buildSafeText(
                                                         "Item Count",
                                                         items.length,
@@ -493,9 +767,10 @@ class _ReceivePageState extends State<ReceivePage> {
                                                 ),
                                               ),
                                               const SizedBox(height: 16),
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
+                                              Wrap(
+                                                alignment: WrapAlignment.center,
+                                                spacing: 12,
+                                                runSpacing: 10,
                                                 children: [
                                                   ElevatedButton(
                                                     style: ElevatedButton.styleFrom(
@@ -514,7 +789,20 @@ class _ReceivePageState extends State<ReceivePage> {
                                                       ),
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 40),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                          Colors.orangeAccent,
+                                                    ),
+                                                    onPressed:
+                                                        () => _checkSingleOrderSteadfastStatus(order),
+                                                    child: const Text(
+                                                      'Check Status',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
                                                   ElevatedButton(
                                                     style: ElevatedButton.styleFrom(
                                                       backgroundColor:
@@ -580,10 +868,12 @@ class _ReceivePageState extends State<ReceivePage> {
       if (userEmail.isEmpty) throw Exception("User email not found");
       final orderLabel = _getNotificationOrderLabel(order);
 
-      await _databaseService.removeItemsFromReceive(userEmail: userEmail);
-      if (order['freeDeliveryUsed'] == false && order['paymentProof'] != null) {
-        deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
-      }
+      // Move to cancelled array (preserves all data + images — no permanent delete)
+      await _databaseService.moveToCancelled(
+        userEmail: userEmail,
+        sourceField: 'to_receive',
+        order: order,
+      );
 
       await _databaseService.sendPushNotification(
         email: userEmail,
@@ -598,7 +888,7 @@ class _ReceivePageState extends State<ReceivePage> {
         orders.removeWhere((item) => item['order_id'] == order['order_id']);
       });
       _scaffoldMessengerKey.currentState!.showSnackBar(
-        const SnackBar(content: Text("Order canceled successfully")),
+        const SnackBar(content: Text("Order moved to Cancelled")),
       );
     } catch (e) {
       if (mounted) Navigator.pop(context); // Close loading dialog
@@ -624,7 +914,10 @@ class _ReceivePageState extends State<ReceivePage> {
       final orderLabel = _getNotificationOrderLabel(order);
 
       // 1. Move the order in the user's document
-      await _databaseService.moveReceiveToCompleted(userEmail: userEmail);
+      await _databaseService.moveReceiveToCompleted(
+        userEmail: userEmail,
+        targetOrder: order,
+      );
 
       // 2. Record the sale for analytics (includes commission lookup)
       await _databaseService.recordSale(order);

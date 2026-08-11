@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -179,6 +179,20 @@ class ApiService {
     } catch (e) {
       debugPrint('ApiService fetchMessageThreads Error: $e');
       return [];
+    }
+  }
+
+  /// Persists the admin's read timestamp for [userId]'s thread to the DB.
+  /// Called as an immediate REST fallback when tapping a thread (before
+  /// the WebSocket mark_read event fires from AdminChatScreen).
+  Future<void> markThreadRead(String userId, String lastReadAt) async {
+    try {
+      await post(
+        '/admin/messages/users/$userId/read',
+        body: {'lastReadAt': lastReadAt},
+      );
+    } catch (e) {
+      debugPrint('ApiService markThreadRead Error: $e');
     }
   }
 
