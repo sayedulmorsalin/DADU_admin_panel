@@ -749,6 +749,7 @@ class _ShippingState extends State<Shipping> {
         userEmail: userEmail,
         sourceField: 'to_ship',
         order: order,
+        cancelledFrom: 'to_ship',
       );
 
       await _databaseService.sendPushNotification(

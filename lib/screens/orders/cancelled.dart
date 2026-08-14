@@ -17,7 +17,11 @@ class _CancelledOrdersState extends State<CancelledOrders> {
   List<Map<String, dynamic>> cancelled = [];
   bool isLoading = true;
   String _searchQuery = '';
+  String _selectedFilter = 'to_ship'; // Default filter: From Shipping
   final Set<int> _expandedIndices = {};
+  final Set<Map<String, dynamic>> _selectedOrders = {};
+
+  bool get _isSelectionMode => _selectedOrders.isNotEmpty;
 
   @override
   void initState() {
@@ -41,6 +45,35 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     });
   }
 
+  void _toggleOrderSelection(Map<String, dynamic> order) {
+    setState(() {
+      if (_selectedOrders.contains(order)) {
+        _selectedOrders.remove(order);
+      } else {
+        _selectedOrders.add(order);
+      }
+    });
+  }
+
+  void _selectAllVisibleOrders(List<Map<String, dynamic>> visibleOrders) {
+    setState(() {
+      final allSelected = visibleOrders.every((o) => _selectedOrders.contains(o));
+      if (allSelected) {
+        for (final o in visibleOrders) {
+          _selectedOrders.remove(o);
+        }
+      } else {
+        _selectedOrders.addAll(visibleOrders);
+      }
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedOrders.clear();
+    });
+  }
+
   Future<void> fetchOrders() async {
     final data = await _databaseService.getAllCancelled();
     data.sort((a, b) {
@@ -60,6 +93,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     });
     setState(() {
       cancelled = data;
+      _selectedOrders.removeWhere((selected) => !cancelled.contains(selected));
       isLoading = false;
     });
   }
@@ -93,9 +127,10 @@ class _CancelledOrdersState extends State<CancelledOrders> {
         }
         // Remove from Firestore
         await _databaseService.deleteCancelledOrder(
-          userDocId: order['user_document_id'],
+          userDocId: order['user_document_id']?.toString() ?? '',
           orderData: order,
         );
+        _selectedOrders.remove(order);
         fetchOrders();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -106,6 +141,72 @@ class _CancelledOrdersState extends State<CancelledOrders> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error deleting order: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _deleteSelectedOrders() async {
+    if (_selectedOrders.isEmpty) return;
+
+    final count = _selectedOrders.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete $count Selected Order${count > 1 ? 's' : ''}'),
+        content: Text(
+          'This will permanently delete $count selected order${count > 1 ? 's' : ''} and all associated images. This action cannot be undone.\n\nAre you sure?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text('Delete Permanently ($count)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.red)),
+      );
+
+      try {
+        final listToDelete = List<Map<String, dynamic>>.from(_selectedOrders);
+        for (final order in listToDelete) {
+          if (order['paymentProof'] != null &&
+              order['paymentProof'].toString().isNotEmpty) {
+            deleteImageFromCloudinaryUrl(order['paymentProof'].toString());
+          }
+          await _databaseService.deleteCancelledOrder(
+            userDocId: order['user_document_id']?.toString() ?? '',
+            orderData: order,
+          );
+        }
+        _clearSelection();
+        await fetchOrders();
+        if (mounted) {
+          Navigator.of(context).pop(); // dismiss progress dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$count order${count > 1 ? 's' : ''} permanently deleted.'),
+              backgroundColor: Colors.red[800],
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // dismiss progress dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting orders: $e')),
           );
         }
       }
@@ -311,10 +412,114 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     );
   }
 
+  String _getCancelSource(Map<String, dynamic> order) {
+    final from = (order['cancelledFrom'] ?? '').toString().toLowerCase().trim();
+    final reason = (order['cancelReason'] ?? order['cancellationReason'] ?? '').toString().toLowerCase();
+
+    if (from == 'steadfast' || reason.contains('steadfast')) {
+      return 'steadfast';
+    }
+    if (from == 'to_verify' || from == 'verify' || reason.contains('verify')) {
+      return 'to_verify';
+    }
+    if (from == 'to_receive' || from == 'receive' || reason.contains('receive')) {
+      return 'to_receive';
+    }
+    if (from == 'to_ship' || from == 'shipping' || from == 'ship' || reason.contains('ship')) {
+      return 'to_ship';
+    }
+
+    if (from == 'to_receive') return 'to_receive';
+    if (from == 'to_verify') return 'to_verify';
+    if (from == 'to_ship') return 'to_ship';
+
+    return 'to_ship'; // Default fallback
+  }
+
+  Widget _buildCancelSourceBadge(String source) {
+    String label;
+    Color bgColor;
+    Color textColor;
+    Color borderColor;
+    IconData icon;
+
+    switch (source) {
+      case 'to_verify':
+        label = 'Canceled from Verify';
+        bgColor = Colors.orange.shade50;
+        textColor = Colors.orange.shade900;
+        borderColor = Colors.orange.shade300;
+        icon = Icons.fact_check_outlined;
+        break;
+      case 'to_ship':
+        label = 'Canceled from Shipping';
+        bgColor = Colors.blue.shade50;
+        textColor = Colors.blue.shade900;
+        borderColor = Colors.blue.shade300;
+        icon = Icons.local_shipping_outlined;
+        break;
+      case 'to_receive':
+        label = 'Canceled from Receive';
+        bgColor = Colors.purple.shade50;
+        textColor = Colors.purple.shade900;
+        borderColor = Colors.purple.shade300;
+        icon = Icons.inventory_2_outlined;
+        break;
+      case 'steadfast':
+        label = 'Canceled from Steadfast';
+        bgColor = Colors.red.shade50;
+        textColor = Colors.red.shade900;
+        borderColor = Colors.red.shade300;
+        icon = Icons.local_post_office_outlined;
+        break;
+      default:
+        label = 'Canceled';
+        bgColor = Colors.grey.shade100;
+        textColor = Colors.grey.shade800;
+        borderColor = Colors.grey.shade400;
+        icon = Icons.cancel_outlined;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int get _shippingCount => cancelled.where((o) => _getCancelSource(o) == 'to_ship').length;
+  int get _verifyCount => cancelled.where((o) => _getCancelSource(o) == 'to_verify').length;
+  int get _receiveCount => cancelled.where((o) => _getCancelSource(o) == 'to_receive').length;
+  int get _steadfastCount => cancelled.where((o) => _getCancelSource(o) == 'steadfast').length;
+
   List<Map<String, dynamic>> get _filteredOrders {
+    final sourceFiltered = cancelled.where((order) {
+      if (_selectedFilter == 'all') return true;
+      return _getCancelSource(order) == _selectedFilter;
+    }).toList();
+
     final query = _normalizeSearchText(_searchQuery);
-    if (query.isEmpty) return cancelled;
-    final scoredOrders = cancelled
+    if (query.isEmpty) return sourceFiltered;
+    final scoredOrders = sourceFiltered
         .map((order) => MapEntry(order, _orderSearchScore(order, query)))
         .where((entry) => entry.value > 0)
         .toList()
@@ -344,6 +549,8 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     addValue(order['address']);
     addValue(order['paymentMethod']);
     addValue(order['cancelReason']);
+    addValue(order['cancelledFrom']);
+    addValue(_getCancelSource(order));
     addValue(_getRefundNumber(order));
     addValue(_getRefundMethod(order));
     if (order['isRefunded'] == true) addValue('refunded');
@@ -371,49 +578,181 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     return score;
   }
 
+  String _getFilterLabel(String key) {
+    switch (key) {
+      case 'to_ship':
+        return 'From Shipping';
+      case 'to_verify':
+        return 'From Verify';
+      case 'to_receive':
+        return 'From Receive';
+      case 'steadfast':
+        return 'From Steadfast';
+      case 'all':
+        return 'All Cancelled';
+      default:
+        return 'Filtered';
+    }
+  }
+
+  Widget _buildFilterChips() {
+    final filters = [
+      {'label': 'From Shipping', 'key': 'to_ship', 'count': _shippingCount, 'icon': Icons.local_shipping_outlined},
+      {'label': 'From Verify', 'key': 'to_verify', 'count': _verifyCount, 'icon': Icons.fact_check_outlined},
+      {'label': 'From Receive', 'key': 'to_receive', 'count': _receiveCount, 'icon': Icons.inventory_2_outlined},
+      {'label': 'From Steadfast', 'key': 'steadfast', 'count': _steadfastCount, 'icon': Icons.local_post_office_outlined},
+      {'label': 'All', 'key': 'all', 'count': cancelled.length, 'icon': Icons.list_alt},
+    ];
+
+    return Container(
+      height: 44,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final filter = filters[index];
+          final String key = filter['key'] as String;
+          final String label = filter['label'] as String;
+          final int count = filter['count'] as int;
+          final IconData icon = filter['icon'] as IconData;
+          final bool isSelected = _selectedFilter == key;
+
+          return ChoiceChip(
+            avatar: Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : Colors.red[800],
+            ),
+            label: Text('$label ($count)'),
+            selected: isSelected,
+            onSelected: (selected) {
+              if (selected) {
+                setState(() {
+                  _selectedFilter = key;
+                });
+              }
+            },
+            selectedColor: Colors.red[700],
+            backgroundColor: Colors.white,
+            labelStyle: TextStyle(
+              color: isSelected ? Colors.white : Colors.red[900],
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+              fontSize: 13,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: isSelected ? Colors.red[700]! : Colors.red.shade200,
+                width: 1.5,
+              ),
+            ),
+            elevation: isSelected ? 2 : 0,
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleOrders = _filteredOrders;
+    final bool allVisibleSelected =
+        visibleOrders.isNotEmpty && visibleOrders.every((o) => _selectedOrders.contains(o));
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF3F3),
       appBar: AppBar(
-        title: const Text(
-          'Cancelled Orders',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          _isSelectionMode ? '${_selectedOrders.length} Selected' : 'Cancelled Orders',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFFFFCDD2),
-        foregroundColor: Colors.red[900],
+        backgroundColor: _isSelectionMode ? Colors.red[800] : const Color(0xFFFFCDD2),
+        foregroundColor: _isSelectionMode ? Colors.white : Colors.red[900],
         elevation: 0,
+        leading: _isSelectionMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
+            : null,
+        actions: _isSelectionMode
+            ? [
+                IconButton(
+                  tooltip: allVisibleSelected ? 'Deselect All' : 'Select All',
+                  icon: Icon(allVisibleSelected ? Icons.deselect : Icons.select_all),
+                  onPressed: () => _selectAllVisibleOrders(visibleOrders),
+                ),
+                IconButton(
+                  tooltip: 'Delete Selected',
+                  icon: const Icon(Icons.delete_forever),
+                  onPressed: _deleteSelectedOrders,
+                ),
+              ]
+            : null,
       ),
+      floatingActionButton: _isSelectionMode
+          ? FloatingActionButton.extended(
+              onPressed: _deleteSelectedOrders,
+              backgroundColor: Colors.red[700],
+              icon: const Icon(Icons.delete_forever, color: Colors.white),
+              label: Text(
+                'Delete (${_selectedOrders.length})',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            )
+          : null,
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.red))
           : Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
+                  // Filter Chips
+                  _buildFilterChips(),
                   // Summary chip
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.red[50],
+                      color: _isSelectionMode ? Colors.red[100] : Colors.red[50],
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
+                      border: Border.all(
+                        color: _isSelectionMode ? Colors.red.shade400 : Colors.red.shade200,
+                      ),
                     ),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.cancel_outlined, color: Colors.red[700], size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Total Cancelled: ${cancelled.length} orders',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red[700],
-                            fontSize: 15,
-                          ),
+                        Row(
+                          children: [
+                            Icon(Icons.cancel_outlined, color: Colors.red[700], size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_getFilterLabel(_selectedFilter)}: ${visibleOrders.length} orders (Total: ${cancelled.length})',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red[700],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
                         ),
+                        if (_isSelectionMode)
+                          Text(
+                            '${_selectedOrders.length} selected',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[900],
+                              fontSize: 14,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -455,7 +794,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                 Text(
                                   cancelled.isEmpty
                                       ? 'No cancelled orders found.'
-                                      : 'No matching orders found.',
+                                      : 'No matching orders found for ${_getFilterLabel(_selectedFilter)}.',
                                   style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600),
@@ -470,30 +809,52 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                               final items = getItems(order);
                               final bool isExpanded =
                                   _expandedIndices.contains(index);
+                              final bool isSelected =
+                                  _selectedOrders.contains(order);
 
                               return Card(
                                 margin: const EdgeInsets.symmetric(
                                     vertical: 6, horizontal: 2),
-                                elevation: 3,
+                                elevation: isSelected ? 5 : 3,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: BorderSide(
-                                      color: Colors.red.shade200, width: 1),
+                                    color: isSelected ? Colors.red.shade700 : Colors.red.shade200,
+                                    width: isSelected ? 2.5 : 1,
+                                  ),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      InkWell(
-                                        onTap: () => _toggleExpansion(index),
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        child: Row(
+                                color: isSelected ? Colors.red[50] : Colors.white,
+                                child: InkWell(
+                                  onTap: () {
+                                    if (_isSelectionMode) {
+                                      _toggleOrderSelection(order);
+                                    } else {
+                                      _toggleExpansion(index);
+                                    }
+                                  },
+                                  onLongPress: () {
+                                    _toggleOrderSelection(order);
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
                                           children: [
+                                            if (_isSelectionMode)
+                                              Padding(
+                                                padding: const EdgeInsets.only(right: 8.0),
+                                                child: Checkbox(
+                                                  value: isSelected,
+                                                  activeColor: Colors.red[700],
+                                                  onChanged: (_) => _toggleOrderSelection(order),
+                                                ),
+                                              ),
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment:
@@ -510,6 +871,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                                     ),
                                                   ),
                                                   _buildModeratorBadge(order['moderator']),
+                                                  _buildCancelSourceBadge(_getCancelSource(order)),
                                                   buildSafeText(
                                                     'Customer Name',
                                                     order['customerName'] ??
@@ -683,163 +1045,151 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                              ),
                                            ],
                                         ),
-                                      ),
-                                      if (isExpanded) ...[
-                                        const Divider(color: Colors.redAccent),
-                                        buildSafeText(
-                                            'Email',
-                                            order['customerEmail'] ??
-                                                order['user_email']),
-                                        buildSafeText(
-                                          'District',
-                                          order['district'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20),
-                                        ),
-                                        buildSafeText(
-                                          'Thana',
-                                          order['thana'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20),
-                                        ),
-                                        buildSafeText(
-                                          'Address',
-                                          order['address'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Text(
-                                          'Items: (${items.length})',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16),
-                                        ),
-                                        if (items.isNotEmpty)
-                                          ...items.map((item) {
-                                            final itemMap =
-                                                item is Map<String, dynamic>
-                                                    ? item
-                                                    : {};
-                                            return ListTile(
-                                              leading: itemMap['imageUrl'] !=
-                                                      null
-                                                  ? Image.network(
-                                                      itemMap['imageUrl']!,
-                                                      width: 50,
-                                                      height: 50,
-                                                      errorBuilder: (context,
-                                                              error,
-                                                              stackTrace) =>
-                                                          const Icon(
-                                                              Icons.error),
-                                                    )
-                                                  : const Icon(Icons.image),
-                                              title: Text(
-                                                itemMap['name']?.toString() ??
-                                                    'Unknown Product',
-                                                style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16),
-                                              ),
-                                              subtitle: Text(
-                                                'Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}',
-                                                style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16),
-                                              ),
-                                            );
-                                          }),
-                                        if (items.isEmpty)
-                                          const Text('No items found',
-                                              style: TextStyle(
-                                                  color: Colors.grey)),
-                                        const SizedBox(height: 10),
-                                        buildSafeText(
-                                            'Subtotal', order['subtotal']),
-                                        buildSafeText(
-                                          'Total',
-                                          order['total'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18),
-                                        ),
-                                        buildSafeText(
-                                          'Delivery fee',
-                                          order['deliveryCharge'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                              color: Colors.blue),
-                                        ),
-                                        buildSafeText(
-                                            'Time', _getFormattedTime(order)),
-                                        buildSafeText('Payment Method',
-                                            order['paymentMethod']),
-                                        if (_getRefundNumber(order).isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    'Refund Phone: ${_getRefundNumber(order)}${_getRefundMethod(order).isNotEmpty ? ' (${_getRefundMethod(order)})' : ''}',
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 18,
-                                                      color: Colors.green[800],
-                                                    ),
-                                                  ),
-                                                ),
-                                                ElevatedButton.icon(
-                                                  onPressed: () {
-                                                    Clipboard.setData(ClipboardData(text: _getRefundNumber(order)));
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text('Copied refund number: ${_getRefundNumber(order)}')),
-                                                    );
-                                                  },
-                                                  icon: const Icon(Icons.copy, size: 16),
-                                                  label: const Text('Copy Refund Phone'),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.green[700],
-                                                    foregroundColor: Colors.white,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          )
-                                        else
-                                          buildSafeText('Refund Phone', 'N/A'),
+                                       if (isExpanded) ...[
+                                         const Divider(color: Colors.redAccent),
                                          buildSafeText(
-                                           'Refund Status',
-                                           order['isRefunded'] == true ? 'COMPLETED ✅' : 'PENDING ⏳',
-                                           style: TextStyle(
-                                             fontWeight: FontWeight.bold,
-                                             fontSize: 18,
-                                             color: order['isRefunded'] == true ? Colors.green[800] : Colors.red[800],
-                                           ),
+                                             'Email',
+                                             order['customerEmail'] ??
+                                                 order['user_email']),
+                                         buildSafeText(
+                                           'District',
+                                           order['district'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 20),
                                          ),
+                                         buildSafeText(
+                                           'Thana',
+                                           order['thana'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 20),
+                                         ),
+                                         buildSafeText(
+                                           'Address',
+                                           order['address'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 20),
+                                         ),
+                                         const SizedBox(height: 10),
+                                         Text(
+                                           'Items: (${items.length})',
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 16),
+                                         ),
+                                         if (items.isNotEmpty)
+                                           ...items.map((item) {
+                                             final itemMap =
+                                                 item is Map<String, dynamic>
+                                                     ? item
+                                                     : {};
+                                             return ListTile(
+                                               leading: itemMap['imageUrl'] !=
+                                                       null
+                                                   ? Image.network(
+                                                       itemMap['imageUrl']!,
+                                                       width: 50,
+                                                       height: 50,
+                                                       errorBuilder: (context,
+                                                               error,
+                                                               stackTrace) =>
+                                                           const Icon(
+                                                               Icons.error),
+                                                     )
+                                                   : const Icon(Icons.image),
+                                               title: Text(
+                                                 itemMap['name']?.toString() ??
+                                                     'Unknown Product',
+                                                 style: const TextStyle(
+                                                     fontWeight: FontWeight.bold,
+                                                     fontSize: 16),
+                                               ),
+                                               subtitle: Text(
+                                                 'Price: ${itemMap['price']} × ${itemMap['quantity']}Unit. Size: ${itemMap['size'] ?? 'N/A'}',
+                                                 style: const TextStyle(
+                                                     fontWeight: FontWeight.bold,
+                                                     fontSize: 16),
+                                               ),
+                                             );
+                                           }),
+                                         if (items.isEmpty)
+                                           const Text('No items found',
+                                               style: TextStyle(
+                                                   color: Colors.grey)),
+                                         const SizedBox(height: 10),
+                                         buildSafeText(
+                                             'Subtotal', order['subtotal']),
+                                         buildSafeText(
+                                           'Total',
+                                           order['total'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 18),
+                                         ),
+                                         buildSafeText(
+                                           'Delivery fee',
+                                           order['deliveryCharge'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 18,
+                                               color: Colors.blue),
+                                         ),
+                                         buildSafeText(
+                                             'Time', _getFormattedTime(order)),
+                                         buildSafeText('Payment Method',
+                                             order['paymentMethod']),
+                                         if (_getRefundNumber(order).isNotEmpty)
+                                           Padding(
+                                             padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                             child: Row(
+                                               children: [
+                                                 Expanded(
+                                                   child: Text(
+                                                     'Refund Phone: ${_getRefundNumber(order)}${_getRefundMethod(order).isNotEmpty ? ' (${_getRefundMethod(order)})' : ''}',
+                                                     style: TextStyle(
+                                                       fontWeight: FontWeight.bold,
+                                                       fontSize: 18,
+                                                       color: Colors.green[800],
+                                                     ),
+                                                   ),
+                                                 ),
+                                                 ElevatedButton.icon(
+                                                   onPressed: () {
+                                                     Clipboard.setData(ClipboardData(text: _getRefundNumber(order)));
+                                                     ScaffoldMessenger.of(context).showSnackBar(
+                                                       SnackBar(content: Text('Copied refund number: ${_getRefundNumber(order)}')),
+                                                     );
+                                                   },
+                                                   icon: const Icon(Icons.copy, size: 16),
+                                                   label: const Text('Copy'),
+                                                   style: ElevatedButton.styleFrom(
+                                                     backgroundColor: Colors.green[700],
+                                                     foregroundColor: Colors.white,
+                                                   ),
+                                                 ),
+                                               ],
+                                             ),
+                                           ),
                                          buildSafeText('Point in account',
                                              order['deliveryPoints']),
-                                        buildSafeText(
-                                          'Point in use',
-                                          order['deliveryPointsUsed'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                              color: Colors.blue),
-                                        ),
-                                        buildSafeText(
-                                          'Request for free delivery',
-                                          order['freeDeliveryUsed'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                              color: Colors.blue),
-                                        ),
+                                         buildSafeText(
+                                           'Point in use',
+                                           order['deliveryPointsUsed'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 18,
+                                               color: Colors.blue),
+                                         ),
+                                         buildSafeText(
+                                           'Request for free delivery',
+                                           order['freeDeliveryUsed'],
+                                           style: const TextStyle(
+                                               fontWeight: FontWeight.bold,
+                                               fontSize: 18,
+                                               color: Colors.blue),
+                                         ),
                                          const SizedBox(height: 8),
                                          const Text(
                                            'Payment Proof:',
@@ -849,44 +1199,45 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                          ),
                                          if (order['paymentProof'] != null &&
                                              order['paymentProof'].toString().isNotEmpty)
-                                           ClipRRect(
-                                             borderRadius: BorderRadius.circular(8),
-                                             child: Image.network(
-                                               order['paymentProof'].toString(),
-                                               width: double.infinity,
-                                               fit: BoxFit.cover,
-                                               loadingBuilder: (context, child, loadingProgress) {
-                                                 if (loadingProgress == null) return child;
-                                                 return const Center(child: CircularProgressIndicator());
-                                               },
-                                               errorBuilder: (context, error, stackTrace) =>
-                                                   const Text('Could not load payment proof image',
-                                                       style: TextStyle(color: Colors.grey)),
+                                           Padding(
+                                             padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                             child: ClipRRect(
+                                               borderRadius: BorderRadius.circular(8),
+                                               child: Image.network(
+                                                 order['paymentProof'].toString(),
+                                                 height: 180,
+                                                 width: double.infinity,
+                                                 fit: BoxFit.cover,
+                                                 errorBuilder: (context, error, stackTrace) =>
+                                                     const Text('Could not load payment proof image',
+                                                         style: TextStyle(color: Colors.grey)),
+                                               ),
                                              ),
                                            )
                                          else
                                            const Text('No payment proof provided',
                                                style: TextStyle(color: Colors.grey)),
                                          Align(
-                                          alignment: Alignment.centerRight,
-                                          child: IconButton(
-                                            icon: const Icon(Icons.delete,
-                                                color: Colors.red),
-                                            onPressed: () =>
-                                                _deleteOrder(order),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
+                                           alignment: Alignment.centerRight,
+                                           child: IconButton(
+                                             icon: const Icon(Icons.delete,
+                                                 color: Colors.red),
+                                             onPressed: () =>
+                                                 _deleteOrder(order),
+                                           ),
+                                         ),
+                                       ],
+                                     ],
+                                   ),
+                                 ),
+                               ),
+                             );
+                           },
+                           ),
+                   ),
+                 ],
+               ),
+             ),
     );
   }
 }

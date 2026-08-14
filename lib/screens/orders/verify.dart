@@ -450,6 +450,7 @@ class _VerifyState extends State<Verify> {
         userEmail: userEmail,
         sourceField: 'to_verify',
         order: order,
+        cancelledFrom: 'to_verify',
       );
 
       // If free delivery was used, reset the flag

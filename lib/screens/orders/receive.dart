@@ -198,6 +198,7 @@ class _ReceivePageState extends State<ReceivePage> {
         sourceField: 'to_receive',
         order: order,
         cancelReason: 'Cancelled on Steadfast Courier',
+        cancelledFrom: 'steadfast',
       );
 
       await _databaseService.sendPushNotification(
@@ -873,6 +874,7 @@ class _ReceivePageState extends State<ReceivePage> {
         userEmail: userEmail,
         sourceField: 'to_receive',
         order: order,
+        cancelledFrom: 'to_receive',
       );
 
       await _databaseService.sendPushNotification(

@@ -316,11 +316,24 @@ class DatabaseService {
   }
 
   Future<void> deleteCancelledOrder({required String userDocId, required Map<String, dynamic> orderData}) async {
+    if (userDocId.isEmpty) return;
     await _db.runTransaction((t) async {
       final ref = _db.collection('users').doc(userDocId);
-      final data = (await t.get(ref)).data();
+      final docSnap = await t.get(ref);
+      if (!docSnap.exists) return;
+      final data = docSnap.data();
       final cancelled = List<dynamic>.from(data?['cancelled'] ?? []);
-      cancelled.removeWhere((o) => o is Map && o['timestamp'] == orderData['timestamp']);
+      cancelled.removeWhere((o) {
+        if (o is Map) {
+          final bool matchTimestamp = orderData['timestamp'] != null &&
+              o['timestamp'] == orderData['timestamp'];
+          final bool matchOrderId = orderData['order_id'] != null &&
+              orderData['order_id'].toString().isNotEmpty &&
+              o['order_id']?.toString() == orderData['order_id']?.toString();
+          return matchTimestamp || matchOrderId;
+        }
+        return false;
+      });
       t.update(ref, {'cancelled': cancelled});
     });
   }
@@ -583,6 +596,7 @@ class DatabaseService {
     required String sourceField, // 'to_verify' | 'to_ship' | 'to_receive'
     required Map<String, dynamic> order,
     String? cancelReason,
+    String? cancelledFrom,
   }) async {
     final snap = await _db
         .collection('users')
@@ -618,7 +632,7 @@ class DatabaseService {
       final cancelled = List<dynamic>.from(data['cancelled'] ?? []);
       final enriched = Map<String, dynamic>.from(order);
       enriched['cancelledAt'] = Timestamp.now();
-      enriched['cancelledFrom'] = sourceField;
+      enriched['cancelledFrom'] = cancelledFrom ?? sourceField;
       if (cancelReason != null && cancelReason.isNotEmpty) {
         enriched['cancelReason'] = cancelReason;
       }
