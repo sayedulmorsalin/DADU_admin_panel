@@ -16,6 +16,35 @@ import 'package:dadu_admin_panel/widgets/typing_indicator.dart';
 import 'package:dadu_admin_panel/services/image_upload_service.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
 
+String sanitizeUtf16(dynamic val) {
+  if (val == null) return '';
+  final String str = val.toString();
+  if (str.isEmpty) return str;
+
+  final List<int> codeUnits = str.codeUnits;
+  final StringBuffer sb = StringBuffer();
+  final int len = codeUnits.length;
+
+  for (int i = 0; i < len; i++) {
+    final int unit = codeUnits[i];
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      if (i + 1 < len && codeUnits[i + 1] >= 0xDC00 && codeUnits[i + 1] <= 0xDFFF) {
+        sb.writeCharCode(unit);
+        sb.writeCharCode(codeUnits[i + 1]);
+        i++;
+      } else {
+        sb.writeCharCode(0xFFFD);
+      }
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+      sb.writeCharCode(0xFFFD);
+    } else {
+      sb.writeCharCode(unit);
+    }
+  }
+
+  return sb.toString();
+}
+
 class AdminChatScreen extends StatefulWidget {
   final String userId;
   final String userEmail;
@@ -58,9 +87,10 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   bool _isRecording = false;
   int _recordDuration = 0;
   Timer? _recordTimer;
+  StreamSubscription<Map<String, dynamic>>? _socketSubscription;
 
   String _getReplySnippet(Map<String, dynamic> msg) {
-    final String text = (msg['message'] ?? '').toString().trim();
+    final String text = sanitizeUtf16((msg['message'] ?? '').toString().trim());
     final String? imgUrl = msg['imageUrl'] ?? msg['image'] ?? msg['img_url'];
 
     if (imgUrl != null && imgUrl.isNotEmpty) {
@@ -81,13 +111,13 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   }
 
   void _scrollToAndHighlightMessage(String targetId) {
-    if (targetId.isEmpty) return;
-    final index = _messages.indexWhere((msg) => msg['id'] == targetId);
+    if (targetId.isEmpty || _messages.isEmpty) return;
+    final index = _messages.indexWhere((msg) => (msg['id'] ?? '').toString() == targetId);
     if (index != -1 && _scrollController.hasClients) {
       final double maxScroll = _scrollController.position.maxScrollExtent;
       final double targetOffset = (index / _messages.length) * maxScroll;
       _scrollController.animateTo(
-        targetOffset,
+        targetOffset.clamp(0.0, maxScroll),
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
@@ -110,7 +140,11 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   void initState() {
     super.initState();
     _isBlocked = widget.isInitialBlocked;
-    _audioRecorder = AudioRecorder();
+    try {
+      _audioRecorder = AudioRecorder();
+    } catch (e) {
+      debugPrint('AdminChatScreen: AudioRecorder init error: $e');
+    }
     WidgetsBinding.instance.addObserver(this);
 
     _loadMessages();
@@ -119,10 +153,12 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   }
 
   void _listenToSocket() {
-    _socketService.messageStream.listen((event) {
+    _socketSubscription?.cancel();
+    _socketSubscription = _socketService.messageStream.listen((event) {
+      if (!mounted) return;
       if (event['type'] == 'new_message') {
-        final String messageId = event['id'] ?? '';
-        final bool alreadyExists = _messages.any((msg) => msg['id'] == messageId);
+        final String messageId = (event['id'] ?? '').toString();
+        final bool alreadyExists = messageId.isNotEmpty && _messages.any((msg) => (msg['id'] ?? '').toString() == messageId);
 
         if (!alreadyExists && mounted) {
           setState(() {
@@ -142,16 +178,24 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    routeObserver.unsubscribe(this);
+    try {
+      routeObserver.unsubscribe(this);
+    } catch (_) {}
     _socketService.sendStopTyping();
     _recordTimer?.cancel();
-    _audioRecorder.dispose();
+    _socketSubscription?.cancel();
+    try {
+      _audioRecorder.dispose();
+    } catch (_) {}
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -216,7 +260,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (mounted && _scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
@@ -473,7 +517,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
   }
 
   Widget _buildReplyContent(String replyText, String? senderRole, bool isAdmin) {
-    String textDisplay = replyText;
+    String textDisplay = sanitizeUtf16(replyText);
     String? imgUrl;
 
     if (replyText.startsWith("[IMAGE]:")) {
@@ -535,11 +579,16 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
+    final String rawName = widget.userName?.trim() ?? '';
+    final String rawEmail = widget.userEmail.trim();
+    final String displayName = rawName.isNotEmpty ? rawName : (rawEmail.isNotEmpty ? rawEmail : 'User');
+    final String avatarInitial = displayName.isNotEmpty ? displayName.substring(0, 1).toUpperCase() : '?';
+
     final String? userImageUrl = widget.userImage?.trim();
     final bool hasValidImage = userImageUrl != null &&
         userImageUrl.isNotEmpty &&
         userImageUrl != "null" &&
-        userImageUrl.startsWith('http');
+        (userImageUrl.startsWith('http://') || userImageUrl.startsWith('https://'));
 
     return Scaffold(
       appBar: AppBar(
@@ -551,7 +600,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
               backgroundImage: hasValidImage ? NetworkImage(userImageUrl) : null,
               child: !hasValidImage
                   ? Text(
-                      (widget.userName ?? widget.userEmail).substring(0, 1).toUpperCase(),
+                      avatarInitial,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     )
                   : null,
@@ -562,12 +611,12 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.userName ?? 'Chat with User',
+                    displayName,
                     style: const TextStyle(fontSize: 16),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    widget.userEmail,
+                    rawEmail,
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -636,7 +685,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                               msg['admin'] == true ||
                               msg['is_staff'] == true;
 
-                          final String text = msg['message'] ?? '';
+                          final String text = sanitizeUtf16(msg['message'] ?? '');
 
                           final String? rawVoiceNoteUrl = msg['voiceNoteUrl'] ?? msg['voice_note_url'] ?? msg['voiceNote'];
                           final String? voiceNoteUrl = rawVoiceNoteUrl != null && rawVoiceNoteUrl.isNotEmpty
@@ -676,12 +725,12 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                           }
 
                           final String? replyToId = msg['replyToId'];
-                          final String? replyToText = msg['replyToText'];
+                          final String? replyToText = msg['replyToText'] != null ? sanitizeUtf16(msg['replyToText']) : null;
                           final String? replyToSenderRole = msg['replyToSenderRole'];
                           final bool isHighlighted = _highlightedMessageId == msg['id'];
 
                           return Dismissible(
-                            key: Key('admin_msg_${msg['id'] ?? index}'),
+                            key: Key('admin_msg_${msg['id'] ?? ''}_$index'),
                             direction: DismissDirection.startToEnd,
                             confirmDismiss: (direction) async {
                               setState(() {

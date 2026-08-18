@@ -27,6 +27,10 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   final Set<String> _selectedUserIds = {};
   bool _isSelectionMode = false;
   final Map<String, Map<String, dynamic>> _userCache = {};
+
+  // Messaging toggle state
+  bool _messagingEnabled = true;
+  bool _isTogglingStatus = false;
   
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -44,6 +48,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     _scrollController.addListener(_onScroll);
     _loadThreads();
     _listenToSocketEvents();
+    _loadMessagingStatus();
   }
 
   void _onScroll() {
@@ -57,7 +62,10 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
     _startPolling();
   }
 
@@ -114,6 +122,45 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     _refreshTimer = null;
   }
 
+  Future<void> _loadMessagingStatus() async {
+    try {
+      final enabled = await _apiService.fetchMessagingStatus();
+      if (mounted) {
+        setState(() {
+          _messagingEnabled = enabled;
+        });
+      }
+    } catch (e) {
+      debugPrint('MessageThreadsPage: Error loading messaging status: $e');
+    }
+  }
+
+  Future<void> _toggleMessaging(bool value) async {
+    if (_isTogglingStatus) return;
+    setState(() => _isTogglingStatus = true);
+
+    final success = await _apiService.updateMessagingStatus(value);
+    if (mounted) {
+      setState(() {
+        if (success) _messagingEnabled = value;
+        _isTogglingStatus = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? 'Messaging ${value ? 'enabled' : 'disabled'} successfully'
+                : 'Failed to update messaging status',
+          ),
+          backgroundColor: success
+              ? (value ? Colors.green : Colors.orange)
+              : Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   DateTime _parseDateTime(dynamic value) {
     if (value == null) return DateTime.fromMillisecondsSinceEpoch(0).toUtc();
     try {
@@ -159,7 +206,10 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     }
 
     try {
-      final threads = await _apiService.fetchMessageThreads(page: 1, limit: _limit);
+      // When refreshing/polling or returning after reply (showLoading: false),
+      // fetch up to current loaded count so we don't truncate loaded pages.
+      final int fetchLimit = showLoading ? _limit : (_currentPage * _limit);
+      final threads = await _apiService.fetchMessageThreads(page: 1, limit: fetchLimit);
       
       // Build lastSeenMap: prefer DB lastReadAt from API response,
       // fall back to local SharedPreferences for threads not yet in DB.
@@ -197,12 +247,32 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
 
       if (mounted) {
         setState(() {
-          _threads = threads;
+          if (showLoading || _threads.isEmpty) {
+            _threads = threads;
+            _currentPage = 1;
+            _hasMore = threads.length == _limit;
+          } else {
+            // Update existing threads in-place or add new ones without discarding loaded pages
+            final Map<String, int> indexMap = {};
+            for (int i = 0; i < _threads.length; i++) {
+              final id = (_threads[i]['uid'] ?? '').toString();
+              if (id.isNotEmpty) indexMap[id] = i;
+            }
+
+            for (final fresh in threads) {
+              final id = (fresh['uid'] ?? '').toString();
+              if (id.isNotEmpty) {
+                if (indexMap.containsKey(id)) {
+                  _threads[indexMap[id]!] = fresh;
+                } else {
+                  _threads.add(fresh);
+                }
+              }
+            }
+          }
           _lastSeenMap = mergedLastSeen;
           _pinnedUserIds = pinned;
           _isLoading = false;
-          _currentPage = 1;
-          _hasMore = threads.length == _limit;
           _sortThreads();
         });
       }
@@ -353,6 +423,35 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
               backgroundColor: Colors.blue[800],
               foregroundColor: Colors.white,
               actions: [
+                // Messaging toggle
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _messagingEnabled ? Icons.chat : Icons.chat_bubble_outline,
+                      size: 18,
+                      color: _messagingEnabled ? Colors.greenAccent : Colors.red[200],
+                    ),
+                    const SizedBox(width: 4),
+                    _isTogglingStatus
+                        ? const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Switch(
+                            value: _messagingEnabled,
+                            onChanged: _toggleMessaging,
+                            activeThumbColor: Colors.greenAccent,
+                            inactiveThumbColor: Colors.red[300],
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
                 IconButton(
                   onPressed: () => _loadThreads(),
                   icon: const Icon(Icons.refresh),
@@ -364,6 +463,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
           : _threads.isEmpty
               ? const Center(child: Text('No messages yet.'))
               : ListView.separated(
+                  key: const PageStorageKey<String>('message_threads_list'),
                   controller: _scrollController,
                   itemCount: _threads.length + (_hasMore ? 1 : 0),
                   separatorBuilder: (context, index) => const Divider(height: 1),
@@ -415,10 +515,11 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                       isUnread = false;
                     }
                     
-                    final String? lastMessage = thread['lastMessageSnippet'] ?? 
+                    final String? rawLastMessage = thread['lastMessageSnippet'] ?? 
                                                thread['lastMessage'] ?? 
                                                thread['message'] ?? 
                                                thread['last_message'];
+                    final String? lastMessage = rawLastMessage != null ? sanitizeUtf16(rawLastMessage) : null;
                     
                     String formattedDate = '';
                     if (lastMessageAt != null) {
@@ -433,7 +534,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                           formattedDate = DateFormat('MMM dd, hh:mm a').format(dhakaDate);
                         }
                       } catch (e) {
-                        formattedDate = lastMessageAt.toString();
+                        formattedDate = sanitizeUtf16(lastMessageAt);
                       }
                     }
 
@@ -446,9 +547,9 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                           }),
                       builder: (context, snapshot) {
                         final userData = snapshot.data;
-                        final name = userData?['name'] ?? email;
+                        final name = sanitizeUtf16(userData?['name'] ?? email);
                         final profilePic = userData?['profile_pic']?.toString().trim();
-                        final displayEmail = userData?['email'] ?? email;
+                        final displayEmail = sanitizeUtf16(userData?['email'] ?? email);
 
                         final bool hasValidImage = profilePic != null && 
                                                  profilePic.isNotEmpty && 

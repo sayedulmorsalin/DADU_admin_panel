@@ -196,6 +196,31 @@ class ApiService {
     }
   }
 
+  /// Fetches the global messaging enabled/disabled state from the backend.
+  Future<bool> fetchMessagingStatus() async {
+    try {
+      final response = await get('/messages/status', requireAuth: false);
+      if (response != null && response['success'] == true) {
+        return response['enabled'] == true;
+      }
+      return true; // Default to enabled if status cannot be determined
+    } catch (e) {
+      debugPrint('ApiService fetchMessagingStatus Error: $e');
+      return true;
+    }
+  }
+
+  /// Enables or disables global messaging (admin-only).
+  Future<bool> updateMessagingStatus(bool enabled) async {
+    try {
+      final response = await post('/messages/status', body: {'enabled': enabled});
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService updateMessagingStatus Error: $e');
+      return false;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchUserMessages(String userId) async {
     try {
       final response = await get('/messages/$userId');
