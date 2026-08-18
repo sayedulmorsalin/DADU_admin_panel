@@ -15,6 +15,8 @@ import 'package:dadu_admin_panel/widgets/voice_note_player.dart';
 import 'package:dadu_admin_panel/widgets/typing_indicator.dart';
 import 'package:dadu_admin_panel/services/image_upload_service.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
+import 'package:dadu_admin_panel/widgets/sports_background_pattern.dart';
+import 'package:dadu_admin_panel/widgets/smooth_slow_scroll_physics.dart';
 
 String sanitizeUtf16(dynamic val) {
   if (val == null) return '';
@@ -594,16 +596,19 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
       appBar: AppBar(
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: Colors.blue[100],
-              backgroundImage: hasValidImage ? NetworkImage(userImageUrl) : null,
-              child: !hasValidImage
-                  ? Text(
-                      avatarInitial,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                    )
-                  : null,
+            Hero(
+              tag: 'chat_user_avatar_${widget.userId}',
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.blue[100],
+                backgroundImage: hasValidImage ? NetworkImage(userImageUrl) : null,
+                child: !hasValidImage
+                    ? Text(
+                        avatarInitial,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -625,7 +630,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
             ),
           ],
         ),
-        backgroundColor: Colors.blue[800],
+        backgroundColor: const Color(0xFF0A192F), // Deep Stadium Blue
         foregroundColor: Colors.white,
         actions: [
           PopupMenuButton<String>(
@@ -641,7 +646,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                 value: 'copy_email',
                 child: Row(
                   children: [
-                    Icon(Icons.content_copy, color: Colors.blue),
+                    Icon(Icons.content_copy, color: Color(0xFFFF5722)), // Action Orange
                     SizedBox(width: 8),
                     Text('Copy Email'),
                   ],
@@ -664,15 +669,19 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
           ),
         ],
       ),
-      body: Column(
-        children: [
+      backgroundColor: const Color(0xFF112240), // Dark Slate Background
+      body: SportsBackgroundPattern(
+        child: Column(
+          children: [
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF5722)))
                 : _messages.isEmpty
-                    ? const Center(child: Text('No messages yet.'))
+                    ? const Center(child: Text('No messages yet.', style: TextStyle(color: Colors.white70)))
                     : ListView.builder(
                         controller: _scrollController,
+                        physics: const SmoothSlowScrollPhysics(),
+                        cacheExtent: 500,
                         padding: const EdgeInsets.all(16),
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
@@ -729,84 +738,78 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                           final String? replyToSenderRole = msg['replyToSenderRole'];
                           final bool isHighlighted = _highlightedMessageId == msg['id'];
 
-                          return Dismissible(
-                            key: Key('admin_msg_${msg['id'] ?? ''}_$index'),
-                            direction: DismissDirection.startToEnd,
-                            confirmDismiss: (direction) async {
-                              setState(() {
-                                _replyingToMessage = msg;
-                              });
-                              return false;
-                            },
-                            background: Container(
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.only(left: 20),
-                              color: Colors.transparent,
-                              child: const Icon(Icons.reply, color: Colors.blue),
-                            ),
-                            child: Align(
-                              alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
-                              child: Column(
-                                crossAxisAlignment: isAdmin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                                    child: Text(
-                                      isAdmin ? 'Admin' : (widget.userName ?? 'User'),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isAdmin ? Colors.blue[900] : Colors.grey[700],
+                          return RepaintBoundary(
+                            child: Dismissible(
+                              key: Key('admin_msg_${msg['id'] ?? ''}_$index'),
+                              direction: DismissDirection.startToEnd,
+                              confirmDismiss: (direction) async {
+                                setState(() {
+                                  _replyingToMessage = msg;
+                                });
+                                return false;
+                              },
+                              background: Container(
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.only(left: 20),
+                                color: Colors.transparent,
+                                child: const Icon(Icons.reply, color: Color(0xFF39FF14)), // Neon Green
+                              ),
+                              child: Align(
+                                alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
+                                child: Column(
+                                  crossAxisAlignment: isAdmin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                                      child: Text(
+                                        isAdmin ? 'Admin' : (widget.userName ?? 'User'),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isAdmin ? const Color(0xFF39FF14) : Colors.white70, // Neon Green or white70
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  GestureDetector(
-                                    onLongPress: () {
-                                      final String textToCopy = text.isNotEmpty
-                                          ? text
-                                          : (imageUrls.isNotEmpty ? "Image" : (voiceNoteUrl != null ? "Voice Note" : ""));
-                                      if (textToCopy.isNotEmpty) {
-                                        FlutterClipboard.copy(textToCopy);
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Message copied to clipboard'),
-                                            duration: Duration(seconds: 2),
+                                    GestureDetector(
+                                      onLongPress: () {
+                                        final String textToCopy = text.isNotEmpty
+                                            ? text
+                                            : (imageUrls.isNotEmpty ? "Image" : (voiceNoteUrl != null ? "Voice Note" : ""));
+                                        if (textToCopy.isNotEmpty) {
+                                          FlutterClipboard.copy(textToCopy);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Message copied to clipboard'),
+                                              duration: Duration(seconds: 2),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: Container(
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: isHighlighted
+                                              ? const Color(0xFF39FF14) // Neon Green highlight
+                                              : (isAdmin ? const Color(0xFFFF5722) : const Color(0xFF1E2D4A)), // Action Orange for admin, deep slate for user
+                                          borderRadius: BorderRadius.circular(16).copyWith(
+                                            bottomRight: isAdmin ? const Radius.circular(2) : const Radius.circular(16),
+                                            bottomLeft: isAdmin ? const Radius.circular(16) : const Radius.circular(2),
                                           ),
-                                        );
-                                      }
-                                    },
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 300),
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: isHighlighted
-                                            ? Colors.amber[300]
-                                            : (isAdmin ? Colors.blue[600] : Colors.white),
-                                        borderRadius: BorderRadius.circular(16).copyWith(
-                                          bottomRight: isAdmin ? const Radius.circular(2) : const Radius.circular(16),
-                                          bottomLeft: isAdmin ? const Radius.circular(16) : const Radius.circular(2),
+                                          boxShadow: isHighlighted
+                                              ? [
+                                                  BoxShadow(
+                                                    color: const Color(0xFF39FF14).withValues(alpha: 0.6),
+                                                    blurRadius: 10,
+                                                    spreadRadius: 2,
+                                                  )
+                                                ]
+                                              : null,
+                                          border: isAdmin ? null : Border.all(color: Colors.white12),
                                         ),
-                                        boxShadow: isHighlighted
-                                            ? [
-                                                BoxShadow(
-                                                  color: Colors.amber.withValues(alpha: 0.6),
-                                                  blurRadius: 10,
-                                                  spreadRadius: 2,
-                                                )
-                                              ]
-                                            : [
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.05),
-                                                  blurRadius: 2,
-                                                  offset: const Offset(0, 1),
-                                                ),
-                                              ],
-                                        border: isAdmin ? null : Border.all(color: Colors.grey[300]!),
-                                      ),
-                                      constraints: BoxConstraints(
-                                        maxWidth: MediaQuery.of(context).size.width * 0.75,
-                                      ),
+                                        constraints: BoxConstraints(
+                                          maxWidth: MediaQuery.of(context).size.width * 0.75,
+                                        ),
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
@@ -822,11 +825,11 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                                                 margin: const EdgeInsets.only(bottom: 8),
                                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                 decoration: BoxDecoration(
-                                                  color: isAdmin ? Colors.blue[700] : Colors.grey[100],
+                                                  color: isAdmin ? const Color(0xFFE64A19) : const Color(0xFF112240), // Darker orange or slate
                                                   borderRadius: BorderRadius.circular(8),
                                                   border: Border(
                                                     left: BorderSide(
-                                                      color: isAdmin ? Colors.white : Colors.blue[800]!,
+                                                      color: isAdmin ? Colors.white : const Color(0xFFFF5722),
                                                       width: 3.5,
                                                     ),
                                                   ),
@@ -841,14 +844,14 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                                                 width: 220,
                                                 padding: const EdgeInsets.all(6),
                                                 decoration: BoxDecoration(
-                                                  color: isAdmin ? Colors.blue[700] : Colors.grey[100],
+                                                  color: isAdmin ? const Color(0xFFE64A19) : const Color(0xFF112240),
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
                                                 child: VoiceNotePlayer(
                                                   url: voiceNoteUrl,
-                                                  activeColor: isAdmin ? Colors.white : Colors.blue[800],
-                                                  iconColor: isAdmin ? Colors.blue[800] : Colors.white,
-                                                  textColor: isAdmin ? Colors.white : Colors.black87,
+                                                  activeColor: Colors.white,
+                                                  iconColor: isAdmin ? const Color(0xFFFF5722) : Colors.white,
+                                                  textColor: Colors.white,
                                                 ),
                                               ),
                                             ),
@@ -879,9 +882,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                                           if (text.isNotEmpty && text != "Voice Note" && text != "Image")
                                             Text(
                                               text,
-                                              style: TextStyle(
+                                              style: const TextStyle(
                                                 fontSize: 15,
-                                                color: isAdmin ? Colors.white : Colors.black87,
+                                                color: Colors.white,
                                               ),
                                             ),
                                           const SizedBox(height: 4),
@@ -890,9 +893,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                                             children: [
                                               Text(
                                                 formattedTime,
-                                                style: TextStyle(
+                                                style: const TextStyle(
                                                   fontSize: 9,
-                                                  color: isAdmin ? Colors.white70 : Colors.grey[600],
+                                                  color: Colors.white70,
                                                 ),
                                               ),
                                               if (isAdmin) ...[
@@ -908,9 +911,10 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                                 ],
                               ),
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
+                    ),
           ),
           ValueListenableBuilder<bool>(
             valueListenable: _socketService.isTyping,
@@ -921,13 +925,17 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
           _buildMessageInput(),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildMessageInput() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
         if (_replyingToMessage != null) Builder(
           builder: (context) {
             String snippetText = _getReplySnippet(_replyingToMessage!);
@@ -946,8 +954,8 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                border: Border(top: BorderSide(color: Colors.blue[200]!), left: BorderSide(color: Colors.blue[800]!, width: 4)),
+                color: const Color(0xFF1E2D4A), // Deep Slate
+                border: Border(top: BorderSide(color: Colors.white12), left: BorderSide(color: const Color(0xFF39FF14), width: 4)),
               ),
               child: Row(
                 children: [
@@ -970,14 +978,14 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                       children: [
                         Text(
                           _replyingToMessage!['senderRole'] == 'admin' ? 'Replying to Yourself' : 'Replying to ${widget.userName ?? widget.userEmail}',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue[900]),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF39FF14)),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           snippetText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -1025,9 +1033,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
         else if (_selectedVoiceNote != null)
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              border: Border(top: BorderSide(color: Colors.blue[200]!)),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E2D4A),
+              border: Border(top: BorderSide(color: Colors.white12)),
             ),
             child: Row(
               children: [
@@ -1035,9 +1043,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                   child: VoiceNotePlayer(
                     url: _selectedVoiceNote!.path,
                     isLocal: true,
-                    activeColor: Colors.blue[800],
+                    activeColor: const Color(0xFFFF5722),
                     iconColor: Colors.white,
-                    textColor: Colors.blue[900],
+                    textColor: Colors.white,
                   ),
                 ),
                 IconButton(
@@ -1051,9 +1059,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
           Container(
             height: 90,
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              border: Border(top: BorderSide(color: Colors.grey[300]!)),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E2D4A),
+              border: Border(top: BorderSide(color: Colors.white12)),
             ),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -1099,12 +1107,12 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF0A192F), // Deep Stadium Blue
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.3),
                 spreadRadius: 1,
-                blurRadius: 3,
+                blurRadius: 5,
                 offset: const Offset(0, -1),
               ),
             ],
@@ -1112,21 +1120,23 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.image, color: Colors.blue),
+                icon: const Icon(Icons.image, color: Color(0xFF39FF14)), // Neon Green
                 onPressed: _pickImages,
               ),
               IconButton(
                 icon: Icon(
                   _isRecording ? Icons.stop : Icons.mic,
-                  color: _isRecording ? Colors.red : Colors.blue,
+                  color: _isRecording ? Colors.red : const Color(0xFF39FF14),
                 ),
                 onPressed: _isRecording ? _stopRecording : _startRecording,
               ),
               Expanded(
                 child: TextField(
                   controller: _messageController,
+                  style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
                     hintText: 'Type a message...',
+                    hintStyle: TextStyle(color: Colors.white54),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -1141,24 +1151,28 @@ class _AdminChatScreenState extends State<AdminChatScreen> with WidgetsBindingOb
                   onSubmitted: (_) => _sendMessage(),
                 ),
               ),
-              if (_isSending)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.blue),
-                  onPressed: _sendMessage,
-                ),
+              AnimatedScale(
+                scale: _isSending ? 0.85 : 1.0,
+                duration: const Duration(milliseconds: 150),
+                child: _isSending
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5722)),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.send, color: Color(0xFFFF5722)), // Action Orange
+                        onPressed: _sendMessage,
+                      ),
+              ),
             ],
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 }

@@ -6,7 +6,10 @@ import 'package:dadu_admin_panel/services/api_service.dart';
 import 'package:dadu_admin_panel/services/chat_storage_service.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
 import 'package:dadu_admin_panel/services/chat_socket_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dadu_admin_panel/screens/chat/admin_chat_screen.dart';
+import 'package:dadu_admin_panel/widgets/sports_background_pattern.dart';
+import 'package:dadu_admin_panel/widgets/smooth_slow_scroll_physics.dart';
 
 class MessageThreadsPage extends StatefulWidget {
   const MessageThreadsPage({super.key});
@@ -27,6 +30,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   final Set<String> _selectedUserIds = {};
   bool _isSelectionMode = false;
   final Map<String, Map<String, dynamic>> _userCache = {};
+  final Map<String, Future<Map<String, dynamic>?>> _userFutures = {};
 
   // Messaging toggle state
   bool _messagingEnabled = true;
@@ -52,9 +56,25 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.hasClients &&
+        _scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 150) {
       if (!_isLoadingMore && _hasMore && !_isSelectionMode) {
         _loadMoreThreads();
+      }
+    }
+  }
+
+  void _prefetchUsers(List<Map<String, dynamic>> threadList) {
+    for (final t in threadList) {
+      final String uid = (t['uid'] ?? '').toString();
+      if (uid.isNotEmpty && !_userCache.containsKey(uid)) {
+        _dbService.getUserById(uid).then((u) {
+          if (u != null && mounted) {
+            setState(() {
+              _userCache[uid] = u;
+            });
+          }
+        });
       }
     }
   }
@@ -177,6 +197,35 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
     return DateTime.fromMillisecondsSinceEpoch(0).toUtc();
   }
 
+  bool _isThreadUnread(Map<String, dynamic> thread) {
+    final String userId = (thread['uid'] ?? '').toString();
+    final lastMessageAt = thread['lastMessageAt'];
+    final DateTime lastMessageDateTime = _parseDateTime(lastMessageAt);
+    final DateTime lastSeenAt = _lastSeenMap[userId] ?? DateTime.fromMillisecondsSinceEpoch(0).toUtc();
+    
+    final bool isNewerThanSeen = lastMessageDateTime.isAfter(lastSeenAt.add(const Duration(seconds: 2)));
+    
+    final int unreadCount = int.tryParse((thread['unreadCount'] ?? thread['unread_count'] ?? thread['unReadCount'] ?? '0').toString()) ?? 0;
+    final String lastSender = (thread['lastMessageSenderRole'] ?? thread['last_sender_role'] ?? thread['role'] ?? thread['senderRole'] ?? '').toString().toLowerCase();
+    
+    bool isUnread = (unreadCount > 0) || 
+                   thread['isUnread'] == true || 
+                   thread['is_unread'] == true || 
+                   thread['status'] == 'unread';
+    
+    if (!isUnread && isNewerThanSeen) {
+      if (lastSender.isEmpty || (lastSender != 'admin' && lastSender != 'staff')) {
+        isUnread = true;
+      }
+    }
+
+    if (lastSender == 'admin' || lastSender == 'staff') {
+      isUnread = false;
+    }
+    
+    return isUnread;
+  }
+
   /// Listens to WebSocket events forwarded through [ChatSocketService].
   /// When a [thread_read] event arrives (from any admin opening a chat),
   /// update the local lastSeenMap so the unread badge disappears instantly.
@@ -274,6 +323,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
           _pinnedUserIds = pinned;
           _isLoading = false;
           _sortThreads();
+          _prefetchUsers(threads);
         });
       }
     } catch (e) {
@@ -297,6 +347,12 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
 
       if (isPinnedA && !isPinnedB) return -1;
       if (!isPinnedA && isPinnedB) return 1;
+
+      final bool isUnreadA = _isThreadUnread(a);
+      final bool isUnreadB = _isThreadUnread(b);
+      
+      if (isUnreadA && !isUnreadB) return -1;
+      if (!isUnreadA && isUnreadB) return 1;
 
       final DateTime dateA = _parseDateTime(a['lastMessageAt']);
       final DateTime dateB = _parseDateTime(b['lastMessageAt']);
@@ -354,6 +410,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
           _hasMore = newThreads.length == _limit;
           _isLoadingMore = false;
           _sortThreads();
+          _prefetchUsers(uniqueNew);
         });
       }
     } catch (e) {
@@ -405,7 +462,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                 onPressed: _exitSelectionMode,
               ),
               title: Text('${_selectedUserIds.length} selected'),
-              backgroundColor: Colors.blue[900],
+              backgroundColor: const Color(0xFF0A192F), // Deep Stadium Blue
               foregroundColor: Colors.white,
               actions: [
                 IconButton(
@@ -420,7 +477,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
             )
           : AppBar(
               title: const Text('User Messages'),
-              backgroundColor: Colors.blue[800],
+              backgroundColor: const Color(0xFF0A192F), // Deep Stadium Blue
               foregroundColor: Colors.white,
               actions: [
                 // Messaging toggle
@@ -430,7 +487,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                     Icon(
                       _messagingEnabled ? Icons.chat : Icons.chat_bubble_outline,
                       size: 18,
-                      color: _messagingEnabled ? Colors.greenAccent : Colors.red[200],
+                      color: _messagingEnabled ? const Color(0xFF39FF14) : Colors.red[200], // Neon Green
                     ),
                     const SizedBox(width: 4),
                     _isTogglingStatus
@@ -445,7 +502,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                         : Switch(
                             value: _messagingEnabled,
                             onChanged: _toggleMessaging,
-                            activeThumbColor: Colors.greenAccent,
+                            activeThumbColor: const Color(0xFF39FF14), // Neon Green
                             inactiveThumbColor: Colors.red[300],
                             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -458,20 +515,24 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                 ),
               ],
             ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _threads.isEmpty
-              ? const Center(child: Text('No messages yet.'))
+      backgroundColor: const Color(0xFF112240), // Dark Slate Background
+      body: SportsBackgroundPattern(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF5722)))
+            : _threads.isEmpty
+                ? const Center(child: Text('No messages yet.', style: TextStyle(color: Colors.white70)))
               : ListView.separated(
                   key: const PageStorageKey<String>('message_threads_list'),
                   controller: _scrollController,
+                  physics: const SmoothSlowScrollPhysics(),
+                  cacheExtent: 500,
                   itemCount: _threads.length + (_hasMore ? 1 : 0),
-                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  separatorBuilder: (context, index) => const Divider(height: 1, color: Colors.white12),
                   itemBuilder: (context, index) {
                     if (index == _threads.length) {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5722))),
                       );
                     }
                     final thread = _threads[index];
@@ -482,38 +543,9 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                     final bool isSelected = _selectedUserIds.contains(userId);
                     final bool isPinned = _pinnedUserIds.contains(userId);
                     
-                    // Robust Unread message detection
-                    // Check local tracking first, then fallback to API fields
                     final DateTime lastMessageDateTime = _parseDateTime(lastMessageAt);
-                    final DateTime lastSeenAt = _lastSeenMap[userId] ?? DateTime.fromMillisecondsSinceEpoch(0).toUtc();
-                    
-                    // A message is unread if:
-                    // 1. It arrived AFTER we last saw the chat (with a 2s buffer to prevent self-message false positives)
-                    // 2. AND the last sender was NOT the admin (if role is available)
-                    final bool isNewerThanSeen = lastMessageDateTime.isAfter(lastSeenAt.add(const Duration(seconds: 2)));
-                    
                     final int unreadCount = int.tryParse((thread['unreadCount'] ?? thread['unread_count'] ?? thread['unReadCount'] ?? '0').toString()) ?? 0;
-                    final String lastSender = (thread['lastMessageSenderRole'] ?? thread['last_sender_role'] ?? thread['role'] ?? thread['senderRole'] ?? '').toString().toLowerCase();
-                    
-                     bool isUnread = (unreadCount > 0) || 
-                                    thread['isUnread'] == true || 
-                                    thread['is_unread'] == true || 
-                                    thread['status'] == 'unread';
-                    
-                    // If not already marked unread by API, check our local tracking
-                    if (!isUnread && isNewerThanSeen) {
-                      // Only mark as unread if we are sure it's not from the admin
-                      if (lastSender.isEmpty || (lastSender != 'admin' && lastSender != 'staff')) {
-                        isUnread = true;
-                      }
-                    }
-
-                    // Override: if admin/staff sent the last message, it's never unread
-                    // (covers the case where the admin just sent a message and the server's
-                    // unreadCount hasn't been reset yet, or lastMessageAt > lastSeenAt by a margin).
-                    if (lastSender == 'admin' || lastSender == 'staff') {
-                      isUnread = false;
-                    }
+                    final bool isUnread = _isThreadUnread(thread);
                     
                     final String? rawLastMessage = thread['lastMessageSnippet'] ?? 
                                                thread['lastMessage'] ?? 
@@ -538,46 +570,88 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                       }
                     }
 
-                    return FutureBuilder<Map<String, dynamic>?>(
-                      future: _userCache.containsKey(userId) 
-                        ? Future.value(_userCache[userId]) 
-                        : _dbService.getUserById(userId).then((u) {
-                            if (u != null) _userCache[userId] = u;
-                            return u;
-                          }),
-                      builder: (context, snapshot) {
-                        final userData = snapshot.data;
-                        final name = sanitizeUtf16(userData?['name'] ?? email);
-                        final profilePic = userData?['profile_pic']?.toString().trim();
-                        final displayEmail = sanitizeUtf16(userData?['email'] ?? email);
+                    final userData = _userCache[userId];
+                    if (userData == null && !_userFutures.containsKey(userId)) {
+                      _userFutures[userId] = _dbService.getUserById(userId).then((u) {
+                        if (u != null && mounted) {
+                          setState(() {
+                            _userCache[userId] = u;
+                          });
+                        }
+                        return u;
+                      });
+                    }
 
-                        final bool hasValidImage = profilePic != null && 
-                                                 profilePic.isNotEmpty && 
-                                                 profilePic != "null" && 
-                                                 profilePic.startsWith('http');
+                    return RepaintBoundary(
+                      child: _buildTileContent(
+                        context,
+                        thread: thread,
+                        userId: userId,
+                        email: email,
+                        userData: userData,
+                        isUnread: isUnread,
+                        isPinned: isPinned,
+                        isSelected: isSelected,
+                        isBlocked: isBlocked,
+                        formattedDate: formattedDate,
+                        unreadCount: unreadCount,
+                        lastMessage: lastMessage,
+                      ),
+                    );
+                  },
+                ),
+      ),
+    );
+  }
+
+  Widget _buildTileContent(
+    BuildContext context, {
+    required Map<String, dynamic> thread,
+    required String userId,
+    required String email,
+    required Map<String, dynamic>? userData,
+    required bool isUnread,
+    required bool isPinned,
+    required bool isSelected,
+    required bool isBlocked,
+    required String formattedDate,
+    required int unreadCount,
+    required String? lastMessage,
+  }) {
+    final name = sanitizeUtf16(userData?['name'] ?? email);
+    final profilePic = userData?['profile_pic']?.toString().trim();
+    final displayEmail = sanitizeUtf16(userData?['email'] ?? email);
+
+    final bool hasValidImage = profilePic != null && 
+                             profilePic.isNotEmpty && 
+                             profilePic != "null" && 
+                             profilePic.startsWith('http');
 
                         return ListTile(
                           selected: isSelected,
-                          selectedTileColor: Colors.blue[100],
-                          tileColor: isUnread ? Colors.blue.withValues(alpha: 0.15) : (isPinned ? Colors.yellow.withValues(alpha: 0.05) : null),
+                          selectedTileColor: const Color(0xFF0A192F),
+                          tileColor: isUnread ? const Color(0xFF39FF14).withValues(alpha: 0.1) : (isPinned ? const Color(0xFFFF5722).withValues(alpha: 0.05) : null),
                           leading: Stack(
                             children: [
-                              CircleAvatar(
-                                backgroundColor: isSelected 
-                                    ? Colors.blue[900] 
-                                    : (isUnread ? Colors.blue[400] : Colors.blue[100]),
-                                backgroundImage: hasValidImage ? NetworkImage(profilePic) : null,
-                                child: isSelected
-                                    ? const Icon(Icons.check, color: Colors.white)
-                                    : (!hasValidImage 
-                                        ? Text(
-                                            name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: isUnread ? Colors.white : Colors.blue[800],
-                                            ),
-                                          )
-                                        : null),
+                              Hero(
+                                tag: 'chat_user_avatar_$userId',
+                                child: CircleAvatar(
+                                  backgroundColor: isSelected 
+                                      ? const Color(0xFF0A192F) 
+                                      : (isUnread ? const Color(0xFF39FF14) : Colors.blueGrey[800]),
+                                  backgroundImage: hasValidImage ? CachedNetworkImageProvider(profilePic) : null,
+                                  child: isSelected
+                                      ? const Icon(Icons.check, color: Colors.white)
+                                      : (!hasValidImage 
+                                          ? Text(
+                                              name.isNotEmpty ? name.substring(0, 1).toUpperCase() : "?",
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                                color: isUnread ? Colors.black : Colors.white,
+                                              ),
+                                            )
+                                          : null),
+                                ),
                               ),
                               if (isPinned && !isSelected)
                                 Positioned(
@@ -588,9 +662,9 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.grey[300]!),
+                                      border: Border.all(color: const Color(0xFF112240)),
                                     ),
-                                    child: const Icon(Icons.push_pin, size: 10, color: Colors.orange),
+                                    child: const Icon(Icons.push_pin, size: 10, color: Color(0xFFFF5722)), // Action Orange
                                   ),
                                 ),
                             ],
@@ -600,14 +674,14 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                               if (isPinned)
                                 const Padding(
                                   padding: EdgeInsets.only(right: 4),
-                                  child: Icon(Icons.push_pin, size: 14, color: Colors.orange),
+                                  child: Icon(Icons.push_pin, size: 14, color: Color(0xFFFF5722)),
                                 ),
                               Expanded(
                                 child: Text(
                                   name,
                                   style: TextStyle(
-                                    fontWeight: isUnread ? FontWeight.w900 : (isPinned ? FontWeight.bold : FontWeight.bold),
-                                    color: isUnread ? Colors.blue[900] : (isPinned ? Colors.orange[900] : Colors.black87),
+                                    fontWeight: isUnread ? FontWeight.w900 : (isPinned ? FontWeight.bold : FontWeight.w600),
+                                    color: isUnread ? const Color(0xFF39FF14) : (isPinned ? const Color(0xFFFF5722) : Colors.white),
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -640,13 +714,13 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       fontSize: 13,
-                                      fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
-                                      color: isUnread ? Colors.black87 : Colors.grey[600],
+                                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.normal,
+                                      color: isUnread ? Colors.white : Colors.white60,
                                     ),
                                   ),
                                 ),
-                              Text(displayEmail, style: const TextStyle(fontSize: 12)),
-                              Text('Last message: $formattedDate', style: const TextStyle(fontSize: 11)),
+                              Text(displayEmail, style: TextStyle(fontSize: 12, color: Colors.white54)),
+                              Text('Last message: $formattedDate', style: TextStyle(fontSize: 11, color: Colors.white38)),
                             ],
                           ),
                           trailing: Column(
@@ -657,22 +731,25 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue[700],
-                                    borderRadius: BorderRadius.circular(10),
+                                    color: const Color(0xFF39FF14), // Neon Green
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(color: const Color(0xFF39FF14).withValues(alpha: 0.5), blurRadius: 4, spreadRadius: 1)
+                                    ],
                                   ),
                                   child: Text(
                                     unreadCount > 0 
                                       ? (unreadCount > 99 ? '99+' : unreadCount.toString())
                                       : 'NEW',
                                     style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
                                     ),
                                   ),
                                 )
                               else
-                                const Icon(Icons.chevron_right, size: 20),
+                                const Icon(Icons.chevron_right, size: 20, color: Colors.white54),
                             ],
                           ),
                           onLongPress: () {
@@ -699,14 +776,32 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
 
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) => AdminChatScreen(
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => AdminChatScreen(
                                     userId: userId,
                                     userEmail: displayEmail,
                                     userName: name,
                                     userImage: profilePic,
                                     isInitialBlocked: isBlocked,
                                   ),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                      reverseCurve: Curves.easeInCubic,
+                                    );
+                                    return SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(0.08, 0.0),
+                                        end: Offset.zero,
+                                      ).animate(curvedAnimation),
+                                      child: FadeTransition(
+                                        opacity: curvedAnimation,
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  transitionDuration: const Duration(milliseconds: 280),
                                 ),
                               ).then((_) {
                                 // Re-stamp lastSeenMap after returning so any message
@@ -726,9 +821,4 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                           },
                         );
                       }
-                    );
-                  },
-                ),
-    );
-  }
-}
+                    }
