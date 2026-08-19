@@ -227,8 +227,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
   }
 
   /// Listens to WebSocket events forwarded through [ChatSocketService].
-  /// When a [thread_read] event arrives (from any admin opening a chat),
-  /// update the local lastSeenMap so the unread badge disappears instantly.
+  /// Updates thread list real-time on [new_message] and [thread_read] events.
   void _listenToSocketEvents() {
     _socketSubscription = _socketService.messageStream.listen((event) {
       if (!mounted) return;
@@ -242,6 +241,36 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
               _lastSeenMap[threadUserId] = lastReadAt;
             });
           } catch (_) {}
+        }
+      } else if (event['type'] == 'new_message' || event['type'] == 'message') {
+        final String senderId = (event['userId'] ?? event['uid'] ?? event['senderId'] ?? '').toString();
+        final String msgText = (event['message'] ?? event['body'] ?? '').toString();
+        final String? imgUrl = event['imageUrl'];
+        final String? voiceUrl = event['voiceNoteUrl'];
+        final String role = (event['senderRole'] ?? event['role'] ?? '').toString();
+        final String timestamp = (event['createdAt'] ?? event['timestamp'] ?? DateTime.now().toUtc().toIso8601String()).toString();
+
+        String snippet = msgText;
+        if (imgUrl != null && imgUrl.isNotEmpty) {
+          snippet = msgText.isNotEmpty && msgText != 'Image' ? '📷 $msgText' : '📷 Image';
+        } else if (voiceUrl != null && voiceUrl.isNotEmpty) {
+          snippet = '🎤 Voice Note';
+        }
+
+        if (senderId.isNotEmpty) {
+          setState(() {
+            final int index = _threads.indexWhere((t) => (t['uid'] ?? '').toString() == senderId);
+            if (index != -1) {
+              _threads[index]['lastMessageSnippet'] = snippet;
+              _threads[index]['lastMessageAt'] = timestamp;
+              _threads[index]['lastMessageSenderRole'] = role;
+              if (role.toLowerCase() != 'admin' && role.toLowerCase() != 'staff') {
+                final int currentUnread = int.tryParse((_threads[index]['unreadCount'] ?? 0).toString()) ?? 0;
+                _threads[index]['unreadCount'] = currentUnread + 1;
+              }
+            }
+            _sortThreads();
+          });
         }
       }
     });
@@ -548,10 +577,45 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                     final bool isUnread = _isThreadUnread(thread);
                     
                     final String? rawLastMessage = thread['lastMessageSnippet'] ?? 
+                                               thread['last_message_snippet'] ?? 
                                                thread['lastMessage'] ?? 
+                                               thread['last_message'] ?? 
                                                thread['message'] ?? 
-                                               thread['last_message'];
-                    final String? lastMessage = rawLastMessage != null ? sanitizeUtf16(rawLastMessage) : null;
+                                               thread['snippet'] ?? 
+                                               thread['body'] ?? 
+                                               thread['lastMessageText'] ?? 
+                                               thread['last_message_text'];
+                    
+                    String? lastMessage;
+                    if (rawLastMessage != null && rawLastMessage.toString().trim().isNotEmpty) {
+                      String cleaned = sanitizeUtf16(rawLastMessage).trim();
+                      if (cleaned.startsWith('[IMAGE]:')) {
+                        final parts = cleaned.substring(8).split('|');
+                        if (parts.length > 1 && parts[1].trim().isNotEmpty) {
+                          cleaned = '📷 ${parts[1].trim()}';
+                        } else {
+                          cleaned = '📷 Image';
+                        }
+                      } else if (cleaned == 'Image') {
+                        cleaned = '📷 Image';
+                      } else if (cleaned == 'Voice Note') {
+                        cleaned = '🎤 Voice Note';
+                      }
+                      lastMessage = cleaned;
+                    } else if ((thread['imageUrl'] != null && thread['imageUrl'].toString().trim().isNotEmpty) ||
+                               (thread['image_url'] != null && thread['image_url'].toString().trim().isNotEmpty) ||
+                               thread['lastMessageType'] == 'image') {
+                      lastMessage = '📷 Image';
+                    } else if ((thread['voiceNoteUrl'] != null && thread['voiceNoteUrl'].toString().trim().isNotEmpty) ||
+                               (thread['voice_note_url'] != null && thread['voice_note_url'].toString().trim().isNotEmpty) ||
+                               thread['lastMessageType'] == 'voice_note') {
+                      lastMessage = '🎤 Voice Note';
+                    }
+
+                    final String lastSenderRole = (thread['lastMessageSenderRole'] ?? thread['last_sender_role'] ?? thread['role'] ?? thread['senderRole'] ?? '').toString().toLowerCase();
+                    if (lastMessage != null && lastMessage.isNotEmpty && (lastSenderRole == 'admin' || lastSenderRole == 'staff')) {
+                      lastMessage = 'You: $lastMessage';
+                    }
                     
                     String formattedDate = '';
                     if (lastMessageAt != null) {
@@ -705,6 +769,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Text(displayEmail, style: const TextStyle(fontSize: 12, color: Colors.white54)),
                               if (lastMessage != null && lastMessage.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2, bottom: 2),
@@ -719,8 +784,7 @@ class _MessageThreadsPageState extends State<MessageThreadsPage> with WidgetsBin
                                     ),
                                   ),
                                 ),
-                              Text(displayEmail, style: TextStyle(fontSize: 12, color: Colors.white54)),
-                              Text('Last message: $formattedDate', style: TextStyle(fontSize: 11, color: Colors.white38)),
+                              Text('Last message: $formattedDate', style: const TextStyle(fontSize: 11, color: Colors.white38)),
                             ],
                           ),
                           trailing: Column(
