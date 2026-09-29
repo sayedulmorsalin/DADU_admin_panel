@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Search extends StatefulWidget {
@@ -520,7 +520,7 @@ class _SearchState extends State<Search> {
           _buildEditableField('Completed Count', _completedCountController, keyboardType: TextInputType.number),
           _buildEditableField('To Receive Count', _toReceiveCountController, keyboardType: TextInputType.number),
           _buildEditableField('To Ship Count', _toShipCountController, keyboardType: TextInputType.number),
-          _buildEditableField('To Verify Count', _toVerifyCountController, keyboardType: TextInputType.number),
+          _buildEditableField('Preparing Count', _toVerifyCountController, keyboardType: TextInputType.number),
           _buildEditableField('Free Delivery Info', _freeDeliveryInfoController, keyboardType: TextInputType.number),
 
           const SizedBox(height: 20),
@@ -568,7 +568,7 @@ class _SearchState extends State<Search> {
         _buildDisplayField('Completed Count', _safeGet(_userDoc!, 'completed_count', defaultValue: 0)),
         _buildDisplayField('To Receive Count', _safeGet(_userDoc!, 'to_receive_count', defaultValue: 0)),
         _buildDisplayField('To Ship Count', _safeGet(_userDoc!, 'to_ship_count', defaultValue: 0)),
-        _buildDisplayField('To Verify Count', _safeGet(_userDoc!, 'to_verify_count', defaultValue: 0)),
+        _buildDisplayField('Preparing Count', _safeGet(_userDoc!, 'to_verify_count', defaultValue: 0)),
         _buildDisplayField('Free Delivery Info', _safeGet(_userDoc!, 'free_delivery_info', defaultValue: 0)),
 
         const SizedBox(height: 20),
@@ -582,7 +582,7 @@ class _SearchState extends State<Search> {
         _buildComplexDataDisplaySafe('To Ship', 'to_ship'),
         _buildComplexDataDisplaySafe('Completed', 'completed'),
         _buildComplexDataDisplaySafe('To Receive', 'to_receive'),
-        _buildComplexDataDisplaySafe('To Verify', 'to_verify'),
+        _buildComplexDataDisplaySafe('Preparing', 'to_verify'),
         _buildComplexDataDisplaySafe('Cart Item (Map)', 'cart_item'),
       ],
     );

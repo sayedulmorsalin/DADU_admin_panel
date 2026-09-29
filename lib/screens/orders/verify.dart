@@ -292,7 +292,7 @@ class _VerifyState extends State<Verify> {
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 204, 223, 232),
       appBar: AppBar(
-        title: const Text("Verify Orders", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Preparing Orders", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color.fromARGB(255, 204, 223, 232),
       ),
       body: isLoading

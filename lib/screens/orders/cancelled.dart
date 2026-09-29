@@ -419,7 +419,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     if (from == 'steadfast' || reason.contains('steadfast')) {
       return 'steadfast';
     }
-    if (from == 'to_verify' || from == 'verify' || reason.contains('verify')) {
+    if (from == 'to_verify' || from == 'verify' || from == 'preparing' || reason.contains('verify') || reason.contains('preparing')) {
       return 'to_verify';
     }
     if (from == 'to_receive' || from == 'receive' || reason.contains('receive')) {
@@ -445,11 +445,11 @@ class _CancelledOrdersState extends State<CancelledOrders> {
 
     switch (source) {
       case 'to_verify':
-        label = 'Canceled from Verify';
+        label = 'Canceled from Preparing';
         bgColor = Colors.orange.shade50;
         textColor = Colors.orange.shade900;
         borderColor = Colors.orange.shade300;
-        icon = Icons.fact_check_outlined;
+        icon = Icons.inventory_2_outlined;
         break;
       case 'to_ship':
         label = 'Canceled from Shipping';
@@ -583,7 +583,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
       case 'to_ship':
         return 'From Shipping';
       case 'to_verify':
-        return 'From Verify';
+        return 'From Preparing';
       case 'to_receive':
         return 'From Receive';
       case 'steadfast':
@@ -598,7 +598,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
   Widget _buildFilterChips() {
     final filters = [
       {'label': 'From Shipping', 'key': 'to_ship', 'count': _shippingCount, 'icon': Icons.local_shipping_outlined},
-      {'label': 'From Verify', 'key': 'to_verify', 'count': _verifyCount, 'icon': Icons.fact_check_outlined},
+      {'label': 'From Preparing', 'key': 'to_verify', 'count': _verifyCount, 'icon': Icons.inventory_2_outlined},
       {'label': 'From Receive', 'key': 'to_receive', 'count': _receiveCount, 'icon': Icons.inventory_2_outlined},
       {'label': 'From Steadfast', 'key': 'steadfast', 'count': _steadfastCount, 'icon': Icons.local_post_office_outlined},
       {'label': 'All', 'key': 'all', 'count': cancelled.length, 'icon': Icons.list_alt},

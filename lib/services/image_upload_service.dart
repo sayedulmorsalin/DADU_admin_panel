@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -17,8 +17,10 @@ class ImageUploadService {
 
   /// Upload two compressed versions
   Future<Map<String, String>> uploadCompressedImages(File originalImage) async {
-    final bytes5 = await _compressImage(originalImage, 15);
-    final bytes20 = await _compressImage(originalImage, 50);
+    // Lightweight thumbnail version for fast grid/list previews (quality 30, 500x500)
+    final bytes5 = await _compressImage(originalImage, 30, minWidth: 500, minHeight: 500);
+    // High-resolution primary image (quality 88, 1440x1440) with clean details
+    final bytes20 = await _compressImage(originalImage, 88, minWidth: 1440, minHeight: 1440);
 
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final url5 = await _uploadToR2(bytes5, 'img5_$timestamp.jpg');
@@ -27,17 +29,17 @@ class ImageUploadService {
     return {'url5': url5, 'url20': url20};
   }
 
-  /// Upload additional image with 50 quality
+  /// Upload additional image with high resolution (quality 88)
   Future<String> uploadAdditionalImage(File image) async {
-    final bytes = await _compressImage(image, 50);
+    final bytes = await _compressImage(image, 88, minWidth: 1440, minHeight: 1440);
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return await _uploadToR2(bytes, 'img_ext_$timestamp.jpg');
   }
 
-  /// Upload banner image
+  /// Upload banner image with high resolution
   Future<String> uploadCompressedBannerImages(File originalImage) async {
     try {
-      final bytes = await _compressImage(originalImage, 50);
+      final bytes = await _compressImage(originalImage, 88, minWidth: 1600, minHeight: 900);
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       return await _uploadToR2(bytes, 'bnimg_$timestamp.jpg');
     } catch (e) {
@@ -50,7 +52,7 @@ class ImageUploadService {
     final urls = await ApiService().uploadMultipartFiles([image], folder: 'chat');
     if (urls.isNotEmpty) return urls.first;
     // Fallback to S3 direct upload if backend upload doesn't return URL
-    final bytes = await _compressImage(image, 50);
+    final bytes = await _compressImage(image, 80, minWidth: 1080, minHeight: 1080);
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return await _uploadToR2(bytes, 'chat_$timestamp.jpg');
   }
@@ -81,15 +83,20 @@ class ImageUploadService {
     await _deleteFromR2(objectKey);
   }
 
-  /// Compress image
-  Future<Uint8List> _compressImage(File file, int quality) async {
+  /// Compress image with configurable resolution and quality
+  Future<Uint8List> _compressImage(
+    File file,
+    int quality, {
+    int minWidth = 1200,
+    int minHeight = 1200,
+  }) async {
     final result = await FlutterImageCompress.compressWithFile(
       file.absolute.path,
       quality: quality,
-      minWidth: 600,
-      minHeight: 600,
+      minWidth: minWidth,
+      minHeight: minHeight,
     );
-    return result!;
+    return result ?? await file.readAsBytes();
   }
 
   /// Upload to Cloudflare R2

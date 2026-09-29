@@ -3,7 +3,6 @@ import 'package:dadu_admin_panel/screens/marketing/banner.dart';
 import 'package:dadu_admin_panel/screens/orders/cancelled.dart';
 import 'package:dadu_admin_panel/screens/orders/delivered.dart';
 import 'package:dadu_admin_panel/screens/products/manage_product.dart';
-import 'package:dadu_admin_panel/screens/marketing/draw.dart';
 import 'package:dadu_admin_panel/screens/products/flash_sell.dart';
 import 'package:dadu_admin_panel/screens/products/search.dart';
 import 'package:dadu_admin_panel/screens/marketing/send_notification.dart';
@@ -146,8 +145,8 @@ class _AdminHomeState extends State<AdminHome> {
   List<_DashboardItem> _buildItems(BuildContext context) => [
     // ── Orders ──────────────────────────────────────────────────────────────
     _DashboardItem(
-      icon: Icons.verified,
-      label: 'Verify',
+      icon: Icons.inventory_2_outlined,
+      label: 'Preparing',
       color: Colors.deepOrange,
       countStream: _verifyCount,
       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Verify())),
@@ -217,12 +216,6 @@ class _AdminHomeState extends State<AdminHome> {
       label: 'Send Notification',
       color: Colors.purple.shade800,
       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SendNotification())),
-    ),
-    _DashboardItem(
-      icon: Icons.casino,
-      label: 'Draw Gift',
-      color: Colors.red.shade700,
-      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Draw())),
     ),
     // ── Utility ──────────────────────────────────────────────────────────────
     _DashboardItem(

@@ -15,7 +15,14 @@ class DatabaseService {
   final String _namesDocId = 'all_product_names';
   final String _baseUrl = apiBaseUrl;
 
-  Future<List<Map<String, dynamic>>> getProducts({int page = 1, int limit = 20, String? brand, String? category}) async {
+  Future<List<Map<String, dynamic>>> getProducts({
+    int page = 1,
+    int limit = 20,
+    String? brand,
+    String? category,
+    String? stock,
+    String? search,
+  }) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       String path = '/products?page=$page&limit=$limit&t=$timestamp';
@@ -24,6 +31,12 @@ class DatabaseService {
       }
       if (category != null && category.isNotEmpty) {
         path += '&category=${Uri.encodeComponent(category)}';
+      }
+      if (stock != null && stock.isNotEmpty) {
+        path += '&stock=${Uri.encodeComponent(stock)}';
+      }
+      if (search != null && search.isNotEmpty) {
+        path += '&q=${Uri.encodeComponent(search)}';
       }
       
       // Using the new ApiService for authenticated requests
@@ -59,6 +72,14 @@ class DatabaseService {
             return '$_baseUrl/images/$url';
           }
 
+          String toHighResUrl(String url) {
+            String norm = normalizeUrl(url);
+            if (norm.contains('img5_')) {
+              return norm.replaceAll('img5_', 'img20_');
+            }
+            return norm;
+          }
+
           final result = {
             "id": productId,
             "name": map['name']?.toString() ?? '',
@@ -76,9 +97,9 @@ class DatabaseService {
             "developerCommission": map['developerCommission']?.toString() ?? '0',
             "clicked": map['clicked'] ?? 0,
             "image5": normalizeUrl(map['imageThree']?.toString() ?? map['image5']?.toString() ?? ''),
-            "image20": normalizeUrl(map['imagePrimary']?.toString() ?? map['image20']?.toString() ?? ''),
-            "image2": normalizeUrl(map['imageOne']?.toString() ?? map['image2']?.toString() ?? ''),
-            "image3": normalizeUrl(map['imageTwo']?.toString() ?? map['image3']?.toString() ?? ''),
+            "image20": toHighResUrl(map['imagePrimary']?.toString() ?? map['image20']?.toString() ?? ''),
+            "image2": toHighResUrl(map['imageOne']?.toString() ?? map['image2']?.toString() ?? ''),
+            "image3": toHighResUrl(map['imageTwo']?.toString() ?? map['image3']?.toString() ?? ''),
             "fl-price": map['fl-price'] ?? map['flashPrice'],
             "oldPrice": map['oldPrice'],
             "flash-expire": map['flash-expire'] ?? map['flashExpire'],
@@ -103,6 +124,23 @@ class DatabaseService {
     } catch (e) {
       return [];
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllProducts({
+    String? stock = 'all',
+    String? search,
+    String? brand,
+    String? category,
+    int limit = 1000,
+  }) async {
+    return getProducts(
+      page: 1,
+      limit: limit,
+      stock: stock,
+      search: search,
+      brand: brand,
+      category: category,
+    );
   }
 
   Future<void> updateProduct(String id, Map<String, dynamic> data) async {
