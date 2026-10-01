@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -163,6 +162,9 @@ class ApiService {
 
   Future<dynamic> put(String path, {Map<String, String>? headers, Object? body, bool requireAuth = true}) =>
       request(path: path, method: 'PUT', headers: headers, body: body, requireAuth: requireAuth);
+
+  Future<dynamic> patch(String path, {Map<String, String>? headers, Object? body, bool requireAuth = true}) =>
+      request(path: path, method: 'PATCH', headers: headers, body: body, requireAuth: requireAuth);
 
   Future<dynamic> delete(String path, {Map<String, String>? headers, bool requireAuth = true}) =>
       request(path: path, method: 'DELETE', headers: headers, requireAuth: requireAuth);
@@ -411,6 +413,74 @@ class ApiService {
       return response != null && response['success'] == true;
     } catch (e) {
       debugPrint('ApiService deleteReview Error: $e');
+      return false;
+    }
+  }
+
+  // --- Admin Used / Old Product Review Methods ---
+
+  Future<Map<String, dynamic>> fetchAdminUsedProducts({
+    String? status,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    try {
+      String path = '/admin/used-products?page=$page&limit=$limit';
+      if (status != null && status.isNotEmpty && status != 'all') {
+        path += '&status=${Uri.encodeComponent(status)}';
+      }
+      if (search != null && search.isNotEmpty) {
+        path += '&q=${Uri.encodeComponent(search)}';
+      }
+      final response = await get(path);
+      if (response != null && response['success'] == true) {
+        return {
+          'success': true,
+          'data': List<Map<String, dynamic>>.from(response['data'] ?? []),
+          'counts': Map<String, dynamic>.from(response['counts'] ?? {}),
+          'pagination': Map<String, dynamic>.from(response['pagination'] ?? {}),
+        };
+      }
+      return {'success': false, 'data': <Map<String, dynamic>>[], 'counts': <String, dynamic>{}};
+    } catch (e) {
+      debugPrint('ApiService fetchAdminUsedProducts Error: $e');
+      return {'success': false, 'data': <Map<String, dynamic>>[], 'counts': <String, dynamic>{}};
+    }
+  }
+
+  Future<bool> updateUsedProductStatus(
+    String id,
+    String status, {
+    String? adminNote,
+  }) async {
+    try {
+      dynamic response;
+      try {
+        response = await patch('/admin/used-products/$id/status', body: {
+          'status': status,
+          if (adminNote != null) 'adminNote': adminNote,
+        });
+      } catch (err) {
+        debugPrint('ApiService updateUsedProductStatus patch failed, trying put: $err');
+        response = await put('/admin/used-products/$id/status', body: {
+          'status': status,
+          if (adminNote != null) 'adminNote': adminNote,
+        });
+      }
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService updateUsedProductStatus Error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteAdminUsedProduct(String id) async {
+    try {
+      final response = await delete('/admin/used-products/$id');
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService deleteAdminUsedProduct Error: $e');
       return false;
     }
   }

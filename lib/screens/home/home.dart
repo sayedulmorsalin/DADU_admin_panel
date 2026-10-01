@@ -12,6 +12,7 @@ import 'package:dadu_admin_panel/screens/orders/verify.dart';
 import 'package:dadu_admin_panel/screens/orders/receive.dart';
 import 'package:dadu_admin_panel/screens/chat/message_threads.dart';
 import 'package:dadu_admin_panel/screens/reviews/admin_reviews_screen.dart';
+import 'package:dadu_admin_panel/screens/products/admin_used_products_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -185,6 +186,12 @@ class _AdminHomeState extends State<AdminHome> {
       label: 'Manage Product',
       color: Colors.orange.shade800,
       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ManageProductPage())),
+    ),
+    _DashboardItem(
+      icon: Icons.recycling_rounded,
+      label: 'Old Products',
+      color: Colors.deepPurple.shade700,
+      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsedProductsScreen())),
     ),
     _DashboardItem(
       icon: Icons.flash_on,
