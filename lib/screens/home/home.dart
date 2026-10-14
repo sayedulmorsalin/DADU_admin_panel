@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dadu_admin_panel/screens/marketing/banner.dart';
 import 'package:dadu_admin_panel/screens/orders/cancelled.dart';
 import 'package:dadu_admin_panel/screens/orders/delivered.dart';
@@ -9,6 +8,7 @@ import 'package:dadu_admin_panel/screens/marketing/send_notification.dart';
 import 'package:dadu_admin_panel/screens/orders/shipping.dart';
 import 'package:dadu_admin_panel/screens/orders/update_payment.dart';
 import 'package:dadu_admin_panel/screens/orders/verify.dart';
+import 'package:dadu_admin_panel/screens/orders/preparing.dart';
 import 'package:dadu_admin_panel/screens/orders/receive.dart';
 import 'package:dadu_admin_panel/screens/chat/message_threads.dart';
 import 'package:dadu_admin_panel/screens/reviews/admin_reviews_screen.dart';
@@ -126,6 +126,7 @@ class _AdminHomeState extends State<AdminHome> {
 
   // Live-count streams (only for items that need a badge)
   late final Stream<int> _verifyCount;
+  late final Stream<int> _preparingCount;
   late final Stream<int> _shippingCount;
   late final Stream<int> _receiveCount;
   late final Stream<int> _deliveredCount;
@@ -135,6 +136,7 @@ class _AdminHomeState extends State<AdminHome> {
   void initState() {
     super.initState();
     _verifyCount   = _dbService.getVerifyCountStream();
+    _preparingCount = _dbService.getPreparingCountStream();
     _shippingCount = _dbService.getShippingCountStream();
     _receiveCount  = _dbService.getReceiveCountStream();
     _deliveredCount  = _dbService.getCompletedCountStream();
@@ -146,11 +148,18 @@ class _AdminHomeState extends State<AdminHome> {
   List<_DashboardItem> _buildItems(BuildContext context) => [
     // ── Orders ──────────────────────────────────────────────────────────────
     _DashboardItem(
+      icon: Icons.fact_check_outlined,
+      label: 'Verify',
+      color: Colors.amber.shade900,
+      countStream: _verifyCount,
+      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Verify())),
+    ),
+    _DashboardItem(
       icon: Icons.inventory_2_outlined,
       label: 'Preparing',
       color: Colors.deepOrange,
-      countStream: _verifyCount,
-      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => Verify())),
+      countStream: _preparingCount,
+      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Preparing())),
     ),
     _DashboardItem(
       icon: Icons.local_shipping,
@@ -195,7 +204,7 @@ class _AdminHomeState extends State<AdminHome> {
     ),
     _DashboardItem(
       icon: Icons.flash_on,
-      label: 'Flash Sell',
+      label: 'Ajker Offer',
       color: Colors.purple.shade600,
       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FlashSell())),
     ),

@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -161,7 +161,7 @@ class _FlashSellState extends State<FlashSell> {
   Future<void> _saveFlashSellTimer(DateTime timer) async {
     try {
       await _dbService.setFlashSellTimer(timer);
-      _showSnackBar("Flash sell timer saved successfully!");
+      _showSnackBar("Ajker offer timer saved successfully!");
       await _loadFlashSellTimer();
     } catch (e) {
       _showSnackBar("Timer save failed: $e");
@@ -171,7 +171,7 @@ class _FlashSellState extends State<FlashSell> {
   Future<void> _deleteFlashSellTimer() async {
     try {
       await _dbService.deleteFlashSellTimer();
-      _showSnackBar("Flash sell timer deleted successfully!");
+      _showSnackBar("Ajker offer timer deleted successfully!");
       await _loadFlashSellTimer();
     } catch (e) {
       _showSnackBar("Timer delete failed: $e");
@@ -193,8 +193,8 @@ class _FlashSellState extends State<FlashSell> {
             return AlertDialog(
               title: Text(
                 _flashSellTimer == null
-                    ? "Set flash sell timer"
-                    : "Modify flash sell timer",
+                    ? "Set Ajker offer timer"
+                    : "Modify Ajker offer timer",
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -294,8 +294,8 @@ class _FlashSellState extends State<FlashSell> {
 
       _showSnackBar(
         isFlash
-            ? "Removed from flash sell successfully!"
-            : "Added to flash sell successfully!",
+            ? "Removed from Ajker offer successfully!"
+            : "Added to Ajker offer successfully!",
       );
       await _loadProducts();
     } catch (e) {
@@ -311,8 +311,8 @@ class _FlashSellState extends State<FlashSell> {
         return AlertDialog(
           title: Text(
             isFlash
-                ? "Remove this product from flash sell?"
-                : "Make this product flash sell?",
+                ? "Remove this product from Ajker offer?"
+                : "Make this product Ajker offer?",
           ),
           actions: [
             TextButton(
@@ -324,7 +324,7 @@ class _FlashSellState extends State<FlashSell> {
                 Navigator.pop(context);
                 await _setFlashStatus(product, isFlash);
               },
-              child: Text(isFlash ? "Remove" : "Flash"),
+              child: Text(isFlash ? "Remove" : "Add"),
             ),
           ],
         );
@@ -357,7 +357,7 @@ class _FlashSellState extends State<FlashSell> {
               onPressed: () async {
                 if (_flashSellTimer == null) {
                   Navigator.pop(context);
-                  _showSnackBar("Please set the flash sell timer first.");
+                  _showSnackBar("Please set the Ajker offer timer first.");
                   return;
                 }
 
@@ -375,7 +375,7 @@ class _FlashSellState extends State<FlashSell> {
                     "flash-expire": FieldValue.delete(),
                   });
 
-                  _showSnackBar("Flash sell updated successfully!");
+                  _showSnackBar("Ajker offer updated successfully!");
                   _loadProducts();
                 } catch (e) {
                   _showSnackBar("Update failed: $e");
@@ -409,7 +409,7 @@ class _FlashSellState extends State<FlashSell> {
       appBar: AppBar(
         centerTitle: true,
         title: Text(
-          "Flash Sell",
+          "Ajker Offer",
           style: TextStyle(
             color: Colors.orange,
             fontSize: 24,
@@ -437,8 +437,8 @@ class _FlashSellState extends State<FlashSell> {
                         children: [
                           Text(
                             _flashSellTimer == null
-                                ? "No flash sell timer set"
-                                : "Flash sell timer",
+                                ? "No Ajker offer timer set"
+                                : "Ajker offer timer",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -447,7 +447,7 @@ class _FlashSellState extends State<FlashSell> {
                           SizedBox(height: 6),
                           Text(
                             _flashSellTimer == null
-                                ? "Set a shared timer for all flash sell products"
+                                ? "Set a shared timer for all Ajker offer products"
                                 : "Ends at: ${_formatTimerLabel(_flashSellTimer)}\nRemaining: $remainingTime",
                             style: TextStyle(fontSize: 14),
                           ),
@@ -491,7 +491,7 @@ class _FlashSellState extends State<FlashSell> {
                     final String countdown =
                         product["flashSell"] == true
                             ? remainingTime
-                            : "Not in flash sell";
+                            : "Not in Ajker offer";
 
                     return Card(
                       elevation: 4,
@@ -566,13 +566,13 @@ class _FlashSellState extends State<FlashSell> {
                                           ? () => _confirmFlashAction(product)
                                           : _flashSellTimer == null
                                           ? () => _showSnackBar(
-                                            "Set the flash sell timer first.",
+                                            "Set the Ajker offer timer first.",
                                           )
                                           : () => showFlashPriceDialog(product),
                                   child: Text(
                                     product["flashSell"] == true
-                                        ? "Remove from Flash Sell"
-                                        : "Flash Sell",
+                                        ? "Remove from Ajker Offer"
+                                        : "Ajker Offer",
                                   ),
                                 ),
                               ],

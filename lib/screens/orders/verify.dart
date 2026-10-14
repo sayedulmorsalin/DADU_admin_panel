@@ -91,15 +91,6 @@ class _VerifyState extends State<Verify> {
     }
   }
 
-  num _safeNum(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value;
-    if (value is String) {
-      return num.tryParse(value) ?? 0;
-    }
-    return 0;
-  }
-
   Widget buildSafeText(String label, dynamic value, {TextStyle? style}) {
     return Text(
       "$label: ${value?.toString() ?? 'N/A'}",
@@ -175,6 +166,16 @@ class _VerifyState extends State<Verify> {
     return text;
   }
 
+  String? _getOrderTrxId(Map<String, dynamic> order) {
+    for (final key in ['paymentTrxId', 'transactionId', 'transaction_id']) {
+      final val = order[key]?.toString().trim();
+      if (val != null && val.isNotEmpty && val != 'N/A' && val != 'null') {
+        return val;
+      }
+    }
+    return null;
+  }
+
   String _buildOrderSummary(Map<String, dynamic> order, List<dynamic> items) {
     final StringBuffer buffer = StringBuffer();
     buffer.writeln('Customer Name: ${_formatValue(order['customerName'] ?? order['user_name'])}');
@@ -192,6 +193,10 @@ class _VerifyState extends State<Verify> {
     buffer.writeln('Point in account: ${_formatValue(order['deliveryPoints'])}');
     buffer.writeln('Point in use: ${_formatValue(order['deliveryPointsUsed'])}');
     buffer.writeln('Request for free delivery: ${_formatValue(order['freeDeliveryUsed'])}');
+    final trxId = _getOrderTrxId(order);
+    if (trxId != null) {
+      buffer.writeln('Transaction ID: ${_formatValue(trxId)} (Unverified - Pending Check)');
+    }
     buffer.writeln('Payment Proof: ${_formatValue(order['paymentProof'])}');
     buffer.writeln('Items:');
 
@@ -253,7 +258,7 @@ class _VerifyState extends State<Verify> {
     }
 
     addValue(order['order_id']);
-    addValue(order['transactionId']);
+    addValue(_getOrderTrxId(order));
     addValue(order['customerName'] ?? order['user_name']);
     addValue(order['customerEmail'] ?? order['user_email']);
     addValue(order['phone'] ?? order['user_phone']);
@@ -292,7 +297,7 @@ class _VerifyState extends State<Verify> {
     return Scaffold(
       backgroundColor: const Color.fromARGB(255, 204, 223, 232),
       appBar: AppBar(
-        title: const Text("Preparing Orders", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Verify Orders", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color.fromARGB(255, 204, 223, 232),
       ),
       body: isLoading
@@ -326,6 +331,7 @@ class _VerifyState extends State<Verify> {
                               final customerName = (order['customerName'] ?? order['user_name'] ?? 'N/A').toString();
                               final phone = (order['phone'] ?? order['user_phone'] ?? 'N/A').toString();
                               final bool isExpanded = _expandedIndices.contains(index);
+                              final trxId = _getOrderTrxId(order);
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 10),
@@ -340,16 +346,54 @@ class _VerifyState extends State<Verify> {
                                         child: Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                buildSafeText("Order No", index + 1, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
-                                                buildSafeText("Customer Name", customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                                                buildSafeText("Phone", phone),
-                                                buildSafeText("Item Count", items.length, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
-                                                if (order['transactionId'] != null)
-                                                  buildSafeText("Transaction ID", order['transactionId'], style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
-                                              ],
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  buildSafeText("Order No", index + 1, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)),
+                                                  buildSafeText("Customer Name", customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                                  buildSafeText("Phone", phone),
+                                                  buildSafeText("Item Count", items.length, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+                                                  if (trxId != null && trxId.isNotEmpty)
+                                                    Padding(
+                                                      padding: const EdgeInsets.only(top: 6),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFFFF3E0),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          border: Border.all(color: const Color(0xFFFFB74D), width: 1.2),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.pending_actions, size: 16, color: Color(0xFFE65100)),
+                                                            const SizedBox(width: 5),
+                                                            Flexible(
+                                                              child: Text(
+                                                                "TrxID: $trxId",
+                                                                style: const TextStyle(
+                                                                  color: Color(0xFFBF360C),
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 14,
+                                                                ),
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 8),
+                                                            InkWell(
+                                                              onTap: () => _copyToClipboard('Transaction ID', trxId),
+                                                              child: const Padding(
+                                                                padding: EdgeInsets.all(2.0),
+                                                                child: Icon(Icons.content_copy, size: 16, color: Color(0xFFE65100)),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
                                             ),
                                             Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
                                           ],
@@ -396,6 +440,33 @@ class _VerifyState extends State<Verify> {
                                         buildCopyableRow("Note", order['note'] ?? 'No note'),
                                         buildSafeText("Time", _getFormattedTime(order)),
                                         buildSafeText("Payment Method", order['paymentMethod']),
+                                        if (trxId != null && trxId.toString().trim().isNotEmpty) ...[
+                                          buildCopyableRow("Transaction ID", trxId),
+                                          Container(
+                                            margin: const EdgeInsets.symmetric(vertical: 4),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFF3E0),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFFFB74D)),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.info_outline, size: 14, color: Color(0xFFE65100)),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  "Unverified TrxID (Requires Admin Verification)",
+                                                  style: TextStyle(
+                                                    color: Color(0xFFBF360C),
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                         if ((order['refundPhone'] ?? order['refund_number'] ?? '').toString().trim().isNotEmpty)
                                           buildCopyableRow("Refund Number", (order['refundPhone'] ?? order['refund_number']).toString().trim()),
                                         buildSafeText("Point in account", order['deliveryPoints']),
@@ -411,9 +482,26 @@ class _VerifyState extends State<Verify> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: () => _rejectOrder(order, index), child: const Text('Reject', style: TextStyle(fontSize: 16, color: Colors.white))),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.redAccent,
+                                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              ),
+                                              onPressed: () => _rejectOrder(order, index),
+                                              child: const Text('Reject', style: TextStyle(fontSize: 16, color: Colors.white)),
+                                            ),
                                             const SizedBox(width: 40),
-                                            ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: () => _acceptOrder(order, index), child: const Text('Accept', style: TextStyle(fontSize: 16, color: Colors.white))),
+                                            ElevatedButton.icon(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              ),
+                                              onPressed: () => _verifyOrder(order, index),
+                                              icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                                              label: const Text('Verify Order', style: TextStyle(fontSize: 16, color: Colors.white)),
+                                            ),
                                           ],
                                         ),
                                       ],
@@ -468,40 +556,66 @@ class _VerifyState extends State<Verify> {
     }
   }
 
-  Future<void> _acceptOrder(Map<String, dynamic> order, int index) async {
-    final TextEditingController transactionController = TextEditingController();
-    final String? transactionId = await showDialog<String>(
+  Future<void> _verifyOrder(Map<String, dynamic> order, int index) async {
+    final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Enter Transaction ID'),
-        content: TextField(controller: transactionController, decoration: const InputDecoration(hintText: 'e.g. STEADFAST-123456', labelText: 'Transaction ID'), textCapitalization: TextCapitalization.characters),
+        title: const Text('Verify Order & Payment'),
+        content: Text(
+          'Are you sure you want to verify this payment and move the order to Preparing?\n\n'
+          'Customer: ${order['customerName'] ?? order['user_name'] ?? 'N/A'}\n'
+          'TrxID: ${order['transactionId'] ?? order['transaction_id'] ?? 'N/A'}',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () {
-            final id = transactionController.text.trim();
-            if (id.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transaction ID is required'))); return; }
-            Navigator.pop(context, id);
-          }, child: const Text('Confirm & Accept')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Verify & Prepare', style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
-    if (transactionId == null) return;
-    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    if (confirmed != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
     try {
       final String userEmail = (order['customerEmail'] ?? order['user_email'] ?? '').toString();
       if (userEmail.isEmpty) throw Exception('User email not found for this order');
       final orderLabel = _getNotificationOrderLabel(order);
-      await _databaseService.moveItemsToShip(userEmail: userEmail, transactionId: transactionId, targetOrder: order);
-      if (order['freeDeliveryUsed'] == true) {
-        await _databaseService.updateUserByEmail(userEmail, {'free_delivery_info': _safeNum(order['deliveryPoints']) - _safeNum(order['baseDeliveryCharge']), 'freeDeliveryUsed': false});
-      }
-      await _databaseService.sendPushNotification(email: userEmail, title: 'Order Accepted', body: 'Your order $orderLabel has been accepted (TXN: $transactionId) and is now being prepared for shipping.');
+
+      await _databaseService.moveItemsToPreparing(
+        userEmail: userEmail,
+        targetOrder: order,
+      );
+
+      await _databaseService.sendPushNotification(
+        email: userEmail,
+        title: 'Payment Verified',
+        body: 'Your payment for order $orderLabel has been verified. Your order is now being prepared.',
+      );
+
       if (mounted) Navigator.pop(context);
-      setState(() { orders.removeWhere((o) => o == order); });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order accepted and moved to shipping.')));
+      setState(() {
+        orders.removeWhere((o) => o == order);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order verified and moved to Preparing.')),
+      );
     } catch (e) {
       if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     }
   }
 }

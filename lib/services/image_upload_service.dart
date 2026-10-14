@@ -38,13 +38,9 @@ class ImageUploadService {
 
   /// Upload banner image with high resolution
   Future<String> uploadCompressedBannerImages(File originalImage) async {
-    try {
-      final bytes = await _compressImage(originalImage, 88, minWidth: 1600, minHeight: 900);
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      return await _uploadToR2(bytes, 'bnimg_$timestamp.jpg');
-    } catch (e) {
-      return '';
-    }
+    final bytes = await _compressImage(originalImage, 88, minWidth: 1600, minHeight: 900);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return await _uploadToR2(bytes, 'bnimg_$timestamp.jpg');
   }
 
   /// Upload chat image

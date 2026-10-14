@@ -568,7 +568,8 @@ class _SearchState extends State<Search> {
         _buildDisplayField('Completed Count', _safeGet(_userDoc!, 'completed_count', defaultValue: 0)),
         _buildDisplayField('To Receive Count', _safeGet(_userDoc!, 'to_receive_count', defaultValue: 0)),
         _buildDisplayField('To Ship Count', _safeGet(_userDoc!, 'to_ship_count', defaultValue: 0)),
-        _buildDisplayField('Preparing Count', _safeGet(_userDoc!, 'to_verify_count', defaultValue: 0)),
+        _buildDisplayField('Preparing Count', _safeGet(_userDoc!, 'to_preparing_count', defaultValue: 0)),
+        _buildDisplayField('Verify Count', _safeGet(_userDoc!, 'to_verify_count', defaultValue: 0)),
         _buildDisplayField('Free Delivery Info', _safeGet(_userDoc!, 'free_delivery_info', defaultValue: 0)),
 
         const SizedBox(height: 20),
@@ -582,7 +583,8 @@ class _SearchState extends State<Search> {
         _buildComplexDataDisplaySafe('To Ship', 'to_ship'),
         _buildComplexDataDisplaySafe('Completed', 'completed'),
         _buildComplexDataDisplaySafe('To Receive', 'to_receive'),
-        _buildComplexDataDisplaySafe('Preparing', 'to_verify'),
+        _buildComplexDataDisplaySafe('Preparing', 'to_preparing'),
+        _buildComplexDataDisplaySafe('Verify', 'to_verify'),
         _buildComplexDataDisplaySafe('Cart Item (Map)', 'cart_item'),
       ],
     );
@@ -633,6 +635,7 @@ class _SearchState extends State<Search> {
       'to_ship',
       'completed',
       'to_receive',
+      'to_preparing',
       'to_verify',
       'cart_item',
     ];

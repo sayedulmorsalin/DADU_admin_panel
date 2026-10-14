@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:clipboard/clipboard.dart';
 
 import 'package:dadu_admin_panel/services/database_service.dart';
 import 'package:dadu_admin_panel/services/steadfast_service.dart';
@@ -117,6 +118,45 @@ class _ShippingState extends State<Shipping> {
     );
   }
 
+  Future<void> _copyToClipboard(String label, String value) async {
+    if (value.isNotEmpty && value != 'N/A') {
+      try {
+        await FlutterClipboard.copy(value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$label copied: $value'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to copy $label: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget buildCopyableRow(String label, dynamic value) {
+    final text = value?.toString() ?? 'N/A';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: buildSafeText(label, text)),
+        if (text.isNotEmpty && text != 'N/A')
+          IconButton(
+            icon: const Icon(Icons.content_copy, size: 18),
+            onPressed: () => _copyToClipboard(label, text),
+            tooltip: 'Copy',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+      ],
+    );
+  }
+
   String _selectedModeratorFilter = 'all';
 
   List<Map<String, dynamic>> get _filteredOrders {
@@ -154,6 +194,8 @@ class _ShippingState extends State<Shipping> {
 
     addValue(order['order_id']);
     addValue(order['transactionId']);
+    addValue(order['paymentTrxId']);
+    addValue(order['courierTrackingId']);
     addValue(order['moderator']);
     addValue(order['customerName']);
     addValue(order['user_name']);
@@ -481,10 +523,45 @@ class _ShippingState extends State<Shipping> {
                                                           color: Colors.blue,
                                                         ),
                                                       ),
+                                                      if ((order['paymentTrxId'] ?? '').toString().trim().isNotEmpty)
+                                                        Padding(
+                                                          padding: const EdgeInsets.only(top: 4),
+                                                          child: Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFFE8F5E9),
+                                                              borderRadius: BorderRadius.circular(6),
+                                                              border: Border.all(color: const Color(0xFF81C784)),
+                                                            ),
+                                                            child: Row(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              children: [
+                                                                const Icon(Icons.verified, size: 14, color: Color(0xFF2E7D32)),
+                                                                const SizedBox(width: 4),
+                                                                Flexible(
+                                                                  child: Text(
+                                                                    "Payment TrxID: ${order['paymentTrxId']}",
+                                                                    style: const TextStyle(
+                                                                      color: Color(0xFF1B5E20),
+                                                                      fontWeight: FontWeight.bold,
+                                                                      fontSize: 13,
+                                                                    ),
+                                                                    overflow: TextOverflow.ellipsis,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(width: 6),
+                                                                InkWell(
+                                                                  onTap: () => _copyToClipboard('Payment TrxID', order['paymentTrxId'].toString()),
+                                                                  child: const Icon(Icons.content_copy, size: 14, color: Color(0xFF2E7D32)),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
                                                       if (order['transactionId'] != null)
                                                         buildSafeText(
-                                                          "Transaction ID",
-                                                          order['transactionId'],
+                                                          "Courier Tracking ID",
+                                                          order['courierTrackingId'] ?? order['steadfastId'] ?? order['transactionId'],
                                                           style: const TextStyle(
                                                             color: Colors.teal,
                                                             fontWeight: FontWeight.bold,
@@ -645,6 +722,36 @@ class _ShippingState extends State<Shipping> {
                                                 "Time",
                                                 _getFormattedTime(order),
                                               ),
+                                              if ((order['paymentTrxId'] ?? '').toString().trim().isNotEmpty) ...[
+                                                buildCopyableRow("Payment Transaction ID", order['paymentTrxId']),
+                                                if (order['isTrxVerified'] == true || order['trxVerificationStatus'] == 'verified')
+                                                  Container(
+                                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFE8F5E9),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: const Color(0xFF81C784)),
+                                                    ),
+                                                    child: const Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.check_circle, size: 14, color: Color(0xFF2E7D32)),
+                                                        SizedBox(width: 4),
+                                                        Text(
+                                                          "Verified Payment",
+                                                          style: TextStyle(
+                                                            color: Color(0xFF1B5E20),
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                              ],
+                                              if ((order['courierTrackingId'] ?? order['steadfastId'] ?? order['transactionId'] ?? '').toString().trim().isNotEmpty)
+                                                buildCopyableRow("Courier Tracking ID", order['courierTrackingId'] ?? order['steadfastId'] ?? order['transactionId']),
                                               const SizedBox(height: 16),
                                               Row(
                                                 mainAxisAlignment:

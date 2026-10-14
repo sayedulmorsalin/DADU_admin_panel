@@ -1,10 +1,9 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:dadu_admin_panel/widgets/banner_card.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dadu_admin_panel/services/database_service.dart';
 import 'package:dadu_admin_panel/services/image_upload_service.dart';
-import 'package:dadu_admin_panel/widgets/product_card.dart';
 
 class BannerPage extends StatefulWidget {
   const BannerPage({super.key});
@@ -17,35 +16,16 @@ class _BannerPageState extends State<BannerPage> {
   final DatabaseService _dbService = DatabaseService();
   final ImageUploadService _imageService = ImageUploadService();
   List<Map<String, dynamic>> products = [];
-  final List<String> brands = ['Adidas', 'Nike', 'Puma', 'Gloves', 'Other_boots', 'Others'];
+  final List<String> brands = ['Adidas', 'Nike', 'Puma', 'New Balance', 'Gloves', 'Other_boots', 'Others'];
 
-  // Add Banner Controllers
-  final TextEditingController _addNameController = TextEditingController();
-  final TextEditingController _addPriceController = TextEditingController();
-  final TextEditingController _addDetailsController = TextEditingController();
-  final TextEditingController _addVideoController = TextEditingController();
   XFile? _pickedImage;
   String? _addErrorMessage;
   bool _isUploading = false;
-
-  // Edit Product Controllers
-  late TextEditingController _editNameController;
-  late TextEditingController _editPriceController;
-  late TextEditingController _editDetailsController;
-  late TextEditingController _editVideoController;
 
   @override
   void initState() {
     super.initState();
     _loadProducts();
-    _initializeEditControllers();
-  }
-
-  void _initializeEditControllers() {
-    _editNameController = TextEditingController();
-    _editPriceController = TextEditingController();
-    _editDetailsController = TextEditingController();
-    _editVideoController = TextEditingController();
   }
 
   Future<void> _loadProducts() async {
@@ -203,7 +183,8 @@ class _BannerPageState extends State<BannerPage> {
 
       // Add to products collection
       await _dbService.addBanner(urls);
-      Navigator.pop(context);
+      await _loadProducts();
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
         _addErrorMessage = "Error: ${e.toString()}";

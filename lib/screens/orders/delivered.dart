@@ -218,8 +218,38 @@ class _DeliveredState extends State<Delivered> {
                                                 buildSafeText("Customer Name", order['customerName'] ?? order['user_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                                                 buildSafeText("Phone", order['phone'] ?? order['user_phone'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                                                 buildSafeText("Item Count", items.length, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue)),
+                                                if ((order['paymentTrxId'] ?? '').toString().trim().isNotEmpty)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFE8F5E9),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(color: const Color(0xFF81C784)),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Icon(Icons.verified, size: 14, color: Color(0xFF2E7D32)),
+                                                          const SizedBox(width: 4),
+                                                          Flexible(
+                                                            child: Text(
+                                                              "Payment TrxID: ${order['paymentTrxId']}",
+                                                              style: const TextStyle(
+                                                                color: Color(0xFF1B5E20),
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 13,
+                                                              ),
+                                                              overflow: TextOverflow.ellipsis,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
                                                 if (order['transactionId'] != null)
-                                                  buildSafeText("Transaction ID", order['transactionId'], style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                                                  buildSafeText("Courier Tracking ID", order['courierTrackingId'] ?? order['steadfastId'] ?? order['transactionId'], style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
                                               ],
                                             ),
                                             Icon(isExpanded ? Icons.expand_less : Icons.expand_more),

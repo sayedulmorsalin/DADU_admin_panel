@@ -1,5 +1,4 @@
-﻿import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,6 +34,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     'Adidas',
     'Nike',
     'Puma',
+    'New Balance',
     'Dadu',
     'Mizuno',
     'Others',
@@ -44,9 +44,10 @@ class _ManageProductPageState extends State<ManageProductPage> {
     'All',
     'Boots Master Grade',
     'Boots Master Grade Copy',
-    'Boots Copy 4 Grade',
     'Boots China Copy',
     'Boots Turf',
+    'Sneaker',
+    'Slippers',
     'Gloves',
     'Jersey',
     'Pant',
@@ -61,6 +62,7 @@ class _ManageProductPageState extends State<ManageProductPage> {
     'Adidas',
     'Nike',
     'Puma',
+    'New Balance',
     'Dadu',
     'Mizuno',
     'Others',
@@ -69,9 +71,10 @@ class _ManageProductPageState extends State<ManageProductPage> {
   final List<String> categories = [
     'Boots Master Grade',
     'Boots Master Grade Copy',
-    'Boots Copy 4 Grade',
     'Boots China Copy',
     'Boots Turf',
+    'Sneaker',
+    'Slippers',
     'Gloves',
     'Jersey',
     'Pant',

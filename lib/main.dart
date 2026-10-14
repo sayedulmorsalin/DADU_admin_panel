@@ -1,4 +1,4 @@
-﻿import 'package:dadu_admin_panel/screens/home/home.dart';
+import 'package:dadu_admin_panel/screens/home/home.dart';
 import 'package:dadu_admin_panel/screens/auth/login_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -57,9 +57,7 @@ class MyApp extends StatelessWidget {
                 future: _isSessionValid(),
                 builder: (context, sessionSnapshot) {
                   if (!sessionSnapshot.hasData) {
-                    return const Scaffold(
-                      body: Center(child: CircularProgressIndicator()),
-                    );
+                    return _buildSplashLoading();
                   }
 
                   if (sessionSnapshot.data == true) {
@@ -75,10 +73,21 @@ class MyApp extends StatelessWidget {
             }
           }
           // Loading state
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return _buildSplashLoading();
         },
+      ),
+    );
+  }
+
+  Widget _buildSplashLoading() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFCB400),
+      body: Center(
+        child: Image.asset(
+          'assets/splash.gif',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const CircularProgressIndicator(color: Colors.black87),
+        ),
       ),
     );
   }

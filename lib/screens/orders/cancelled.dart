@@ -419,7 +419,10 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     if (from == 'steadfast' || reason.contains('steadfast')) {
       return 'steadfast';
     }
-    if (from == 'to_verify' || from == 'verify' || from == 'preparing' || reason.contains('verify') || reason.contains('preparing')) {
+    if (from == 'to_preparing' || from == 'preparing') {
+      return 'to_preparing';
+    }
+    if (from == 'to_verify' || from == 'verify') {
       return 'to_verify';
     }
     if (from == 'to_receive' || from == 'receive' || reason.contains('receive')) {
@@ -430,6 +433,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     }
 
     if (from == 'to_receive') return 'to_receive';
+    if (from == 'to_preparing') return 'to_preparing';
     if (from == 'to_verify') return 'to_verify';
     if (from == 'to_ship') return 'to_ship';
 
@@ -445,6 +449,13 @@ class _CancelledOrdersState extends State<CancelledOrders> {
 
     switch (source) {
       case 'to_verify':
+        label = 'Canceled from Verify';
+        bgColor = Colors.amber.shade50;
+        textColor = Colors.amber.shade900;
+        borderColor = Colors.amber.shade300;
+        icon = Icons.fact_check_outlined;
+        break;
+      case 'to_preparing':
         label = 'Canceled from Preparing';
         bgColor = Colors.orange.shade50;
         textColor = Colors.orange.shade900;
@@ -507,6 +518,7 @@ class _CancelledOrdersState extends State<CancelledOrders> {
   }
 
   int get _shippingCount => cancelled.where((o) => _getCancelSource(o) == 'to_ship').length;
+  int get _preparingCount => cancelled.where((o) => _getCancelSource(o) == 'to_preparing').length;
   int get _verifyCount => cancelled.where((o) => _getCancelSource(o) == 'to_verify').length;
   int get _receiveCount => cancelled.where((o) => _getCancelSource(o) == 'to_receive').length;
   int get _steadfastCount => cancelled.where((o) => _getCancelSource(o) == 'steadfast').length;
@@ -582,8 +594,10 @@ class _CancelledOrdersState extends State<CancelledOrders> {
     switch (key) {
       case 'to_ship':
         return 'From Shipping';
-      case 'to_verify':
+      case 'to_preparing':
         return 'From Preparing';
+      case 'to_verify':
+        return 'From Verify';
       case 'to_receive':
         return 'From Receive';
       case 'steadfast':
@@ -598,7 +612,8 @@ class _CancelledOrdersState extends State<CancelledOrders> {
   Widget _buildFilterChips() {
     final filters = [
       {'label': 'From Shipping', 'key': 'to_ship', 'count': _shippingCount, 'icon': Icons.local_shipping_outlined},
-      {'label': 'From Preparing', 'key': 'to_verify', 'count': _verifyCount, 'icon': Icons.inventory_2_outlined},
+      {'label': 'From Preparing', 'key': 'to_preparing', 'count': _preparingCount, 'icon': Icons.inventory_2_outlined},
+      {'label': 'From Verify', 'key': 'to_verify', 'count': _verifyCount, 'icon': Icons.fact_check_outlined},
       {'label': 'From Receive', 'key': 'to_receive', 'count': _receiveCount, 'icon': Icons.inventory_2_outlined},
       {'label': 'From Steadfast', 'key': 'steadfast', 'count': _steadfastCount, 'icon': Icons.local_post_office_outlined},
       {'label': 'All', 'key': 'all', 'count': cancelled.length, 'icon': Icons.list_alt},
@@ -902,11 +917,40 @@ class _CancelledOrdersState extends State<CancelledOrders> {
                                                       color: Colors.blue,
                                                     ),
                                                   ),
-                                                  if (order['transactionId'] !=
-                                                      null)
+                                                  if ((order['paymentTrxId'] ?? '').toString().trim().isNotEmpty)
+                                                    Padding(
+                                                      padding: const EdgeInsets.only(top: 4),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFE8F5E9),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(color: const Color(0xFF81C784)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.verified, size: 14, color: Color(0xFF2E7D32)),
+                                                            const SizedBox(width: 4),
+                                                            Flexible(
+                                                              child: Text(
+                                                                "Payment TrxID: ${order['paymentTrxId']}",
+                                                                style: const TextStyle(
+                                                                  color: Color(0xFF1B5E20),
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 13,
+                                                                ),
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  if (order['transactionId'] != null)
                                                     buildSafeText(
-                                                      'Transaction ID',
-                                                      order['transactionId'],
+                                                      'Courier Tracking ID',
+                                                      order['courierTrackingId'] ?? order['steadfastId'] ?? order['transactionId'],
                                                       style: const TextStyle(
                                                         color: Colors.teal,
                                                         fontWeight:

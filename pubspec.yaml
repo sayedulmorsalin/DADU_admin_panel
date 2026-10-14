@@ -87,6 +87,8 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/d1.jpg
+    - assets/splash.gif
+    - assets/Gemini_Generated_Gif_7cmtb77cmtb77cmt.gif
     - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see

@@ -277,6 +277,7 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getAllOrdersVerify() async => _getOrders('to_verify');
+  Future<List<Map<String, dynamic>>> getAllOrdersPreparing() async => _getOrders('to_preparing');
   Future<List<Map<String, dynamic>>> getAllShipped() async => _getOrders('to_ship');
   Future<List<Map<String, dynamic>>> getAllDelivered() async => _getOrders('completed');
   Future<List<Map<String, dynamic>>> getAllReceived() async => _getOrders('to_receive');
@@ -323,6 +324,15 @@ class DatabaseService {
                   item['refund_provider'] ??
                   data['refund_method'] ??
                   data['refundMethod'],
+              'transactionId': item['transactionId'] ?? item['transaction_id'] ?? item['paymentTrxId'],
+              'transaction_id': item['transaction_id'] ?? item['transactionId'] ?? item['paymentTrxId'],
+              'paymentTrxId': item['paymentTrxId'] ?? item['transactionId'] ?? item['transaction_id'],
+              'courierTrackingId': item['courierTrackingId'] ?? item['steadfastId'],
+              'steadfastId': item['steadfastId'] ?? item['courierTrackingId'],
+              'isTrxVerified': item['isTrxVerified'] == true ||
+                  field == 'to_preparing' ||
+                  item['order_status'] == 'preparing' ||
+                  item['trxVerificationStatus'] == 'verified',
             });
           }
         }
@@ -333,6 +343,7 @@ class DatabaseService {
   }
 
   Stream<int> getVerifyCountStream() => _db.collection('users').where('to_verify', isGreaterThan: []).snapshots().map((s) => s.size);
+  Stream<int> getPreparingCountStream() => _db.collection('users').where('to_preparing', isGreaterThan: []).snapshots().map((s) => s.size);
   Stream<int> getShippingCountStream() => _db.collection('users').where('to_ship', isGreaterThan: []).snapshots().map((s) => s.size);
   Stream<int> getReceiveCountStream() => _db.collection('users').where('to_receive', isGreaterThan: []).snapshots().map((s) => s.size);
   Stream<int> getCompletedCountStream() => _db.collection('users').where('completed', isGreaterThan: []).snapshots().map((s) => s.size);
@@ -514,8 +525,37 @@ class DatabaseService {
   Future<void> deleteBanner(String id) => _db.collection('banners').doc(id).delete();
   Future<List<Map<String, dynamic>>> getBanners() async => (await _db.collection('banners').get()).docs.map((d) => {'id': d.id, 'imageUrl': d.data()['imageUrl']}).toList();
   
-  Future<void> moveItemsToShip({required String userEmail, String? transactionId, Map<String, dynamic>? targetOrder}) => 
-      _moveOrder(userEmail, 'to_verify', 'to_ship', extraData: transactionId != null ? {'transactionId': transactionId} : null, targetOrder: targetOrder);
+  Future<void> moveItemsToPreparing({required String userEmail, Map<String, dynamic>? targetOrder}) => 
+      _moveOrder(userEmail, 'to_verify', 'to_preparing', extraData: {
+        'order_status': 'preparing',
+        'isTrxVerified': true,
+        'trxVerificationStatus': 'verified',
+      }, targetOrder: targetOrder);
+
+  Future<void> moveItemsToShip({
+    required String userEmail,
+    String? transactionId,
+    Map<String, dynamic>? targetOrder,
+    String fromField = 'to_preparing',
+  }) {
+    final originalPaymentTrxId = targetOrder?['paymentTrxId'] ?? targetOrder?['transactionId'] ?? targetOrder?['transaction_id'];
+    return _moveOrder(
+      userEmail,
+      fromField,
+      'to_ship',
+      extraData: {
+        'order_status': 'shipping',
+        if (originalPaymentTrxId != null && originalPaymentTrxId.toString().trim().isNotEmpty)
+          'paymentTrxId': originalPaymentTrxId,
+        if (transactionId != null) ...{
+          'courierTrackingId': transactionId,
+          'steadfastId': transactionId,
+          'transactionId': transactionId,
+        },
+      },
+      targetOrder: targetOrder,
+    );
+  }
   
   Future<void> moveItemsToReceive({required String userEmail, Map<String, dynamic>? targetOrder, Map<String, dynamic>? extraData}) => 
       _moveOrder(userEmail, 'to_ship', 'to_receive', extraData: extraData, targetOrder: targetOrder);
@@ -542,7 +582,7 @@ class DatabaseService {
       
       List<dynamic> itemsToMove = [];
 
-      final bool isMovingToShip = (from == 'to_verify' && to == 'to_ship');
+      final bool isMovingToShip = ((from == 'to_verify' || from == 'to_preparing') && to == 'to_ship');
       DocumentReference? modRef;
       int lastIndex = 2;
       bool updatedModCounter = false;

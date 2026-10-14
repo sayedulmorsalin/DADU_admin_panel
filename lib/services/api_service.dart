@@ -268,7 +268,7 @@ class ApiService {
       for (final file in files) {
         final stream = http.ByteStream(file.openRead());
         final length = await file.length();
-        final filename = file.path.split('/').last;
+        final filename = file.path.split(RegExp(r'[/\\]')).last;
 
         final multipartFile = http.MultipartFile(
           'files',
@@ -481,6 +481,76 @@ class ApiService {
       return response != null && response['success'] == true;
     } catch (e) {
       debugPrint('ApiService deleteAdminUsedProduct Error: $e');
+      return false;
+    }
+  }
+
+  // ==========================================
+  // User Analytics & Activity Reporting
+  // ==========================================
+
+  Future<Map<String, dynamic>?> fetchAnalyticsOverview() async {
+    try {
+      final response = await get('/admin/analytics/overview');
+      if (response != null && response['success'] == true) {
+        return Map<String, dynamic>.from(response['data'] ?? {});
+      }
+      return null;
+    } catch (e) {
+      debugPrint('ApiService fetchAnalyticsOverview Error: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchTopVisitedProducts({int limit = 20, int? days}) async {
+    try {
+      String path = '/admin/analytics/top-products?limit=$limit';
+      if (days != null) path += '&days=$days';
+      final response = await get(path);
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['data'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchTopVisitedProducts Error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchTopSearchQueries({int limit = 20, int? days}) async {
+    try {
+      String path = '/admin/analytics/top-searches?limit=$limit';
+      if (days != null) path += '&days=$days';
+      final response = await get(path);
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['data'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchTopSearchQueries Error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchRecentUserActivities({int limit = 50}) async {
+    try {
+      final response = await get('/admin/analytics/recent-events?limit=$limit');
+      if (response != null && response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['data'] ?? []);
+      }
+      return [];
+    } catch (e) {
+      debugPrint('ApiService fetchRecentUserActivities Error: $e');
+      return [];
+    }
+  }
+
+  Future<bool> clearUserAnalytics() async {
+    try {
+      final response = await delete('/admin/analytics');
+      return response != null && response['success'] == true;
+    } catch (e) {
+      debugPrint('ApiService clearUserAnalytics Error: $e');
       return false;
     }
   }
